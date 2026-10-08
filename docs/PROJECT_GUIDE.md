@@ -12,7 +12,7 @@ Can logistic regression, XGBoost, and an Explainable Boosting Machine (EBM) rank
 | **3** | Create current-transaction fields and earlier sender, receiver, and sender–receiver counts. | Capture a small part of the transaction network without using labels. |
 | **4** | Split by time and encode categories. | Train on September 1–6, select on September 7–8, and report September 9–10 separately. |
 | **5** | Fit the three models using training rows. | Compare linear, tree, and additive approaches on the same 45 encoded columns. |
-| **6** | Show average precision, ROC-AUC, and precision and recall at 100, 500, and 1,000 alerts. | Compare overall ranking and several review capacities. |
+| **6** | Show average precision, ROC-AUC, precision, recall, F1, and a confusion matrix. | Evaluate ranking and binary alerts using thresholds selected on validation data. |
 | **7–8** | Show model explanations and limits. | Explain scores without treating them as conclusions about a real customer. |
 
 The raw CSV remains at `data/raw/HI-Small_Trans.csv`. Tables and charts stay in the notebook; it creates no metrics JSON, predictions CSV, or `results/` directory.
@@ -35,9 +35,21 @@ We exclude September 11–18 because those eight days contain only **1,108 rows,
 
 - **Current transaction:** log paid amount, log received amount, hour, same-bank flag, same-account flag, payment format, payment currency, and receiving currency.
 - **Earlier sampled activity:** `prior_sender_count`, `prior_receiver_count`, and `prior_pair_count` count earlier transactions for the sender, receiver, and sender–receiver relationship. Rows with the same timestamp do not count one another.
-- **Account IDs:** used to form the history counts, then dropped. The models do not receive raw account IDs as columns.
+- **Account and bank IDs:** kept in the working `transactions` table and used to form history and relationship features. The models do not receive raw IDs as predictor columns.
 
-These history counts are incomplete because half of eligible transactions were left out. They are a simple approximation of network context. The [IBM paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) uses richer graph features, including vertex statistics and cycle patterns. Its published F1 results use a different feature pipeline and metric, so they are **not directly comparable** with this notebook's average precision.
+All **11 original CSV fields** are read. Here is where each one goes:
+
+| Source field | Use in this notebook |
+| --- | --- |
+| `Timestamp` | Time split, transaction hour, and strictly earlier history. |
+| `From Bank`, sender `Account` | Sender identity for past-activity counts and same-bank/account flags. |
+| `To Bank`, receiver `Account` (`Account.1` in pandas) | Receiver and sender–receiver history; same-bank/account flags. |
+| `Amount Paid`, `Payment Currency` | Log paid amount and payment-currency category. |
+| `Amount Received`, `Receiving Currency` | Log received amount and receiving-currency category. |
+| `Payment Format` | Encoded payment-format category. |
+| `Is Laundering` | Training/evaluation label only; never a predictor. |
+
+These history counts are incomplete because half of eligible transactions were left out. They are a simple approximation of network context. The [IBM paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) uses richer graph features, including vertex statistics and cycle patterns. It also **excludes raw account IDs as model predictors** to prevent learning the IDs themselves. That is a modeling choice, not a regulatory ban. Its published F1 results use a different feature pipeline and split, so they are **not directly comparable** with this notebook's F1.
 
 ## Why the old results were weak
 
@@ -45,42 +57,40 @@ Adding rows alone did little. With the **old features and old inverse-frequency 
 
 At 50% sampling and XGBoost weight 10, these controlled feature checks show where the gain came from. They used the same dates and model settings; the reporting period was examined during development.
 
-| Features | Validation AP | Reporting-period AP | Positives in top 100 |
-| --- | ---: | ---: | ---: |
-| Previous simple features | 0.0602 | 0.0535 | 10 |
-| Plus received amount, currency, and same-account flag | 0.0627 | 0.0576 | 9 |
-| Plus receiver and pair history counts | 0.2164 | 0.1441 | 44 |
-| All revised features | **0.2349** | **0.1525** | **45** |
+| Features | Validation AP | Reporting-period AP |
+| --- | ---: | ---: |
+| Previous simple features | 0.0602 | 0.0535 |
+| Plus received amount, currency, and same-account flag | 0.0627 | 0.0576 |
+| Plus receiver and pair history counts | 0.2164 | 0.1441 |
+| All revised features | **0.2349** | **0.1525** |
 
 The main missing signal was **earlier relationship activity**, not just more rows or extra current-transaction fields. This table describes these experiments; it does not prove the same improvement on another dataset or a truly fresh time period.
 
 ## Read the revised results
 
-**Average precision (AP)** summarizes precision across recall levels. The reporting-period positive-label rate is **0.00113**, so a random ranking has AP around **0.00113**. ROC-AUC is a secondary ranking measure and can look high even when the top alert queue is weak. [scikit-learn's precision–recall guide](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html) explains the metrics.
+There is **no regulator-prescribed list of AML classifier metrics** in the guidance reviewed here. This notebook uses established classification measures: **average precision (AP)** and **ROC-AUC** for ranking, and **precision, recall, F1, and a confusion matrix** for alerts at an explicit threshold. The [IBM benchmark](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) emphasizes minority-class F1, precision, and recall because accuracy is misleading when labels are rare. The reporting-period positive-label rate is **0.00113**, the random-ranking baseline for AP. [scikit-learn's precision–recall guide](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html) explains AP and the precision–recall tradeoff.
 
-| Model | Validation AP | Reporting-period AP | Reporting-period ROC-AUC |
-| --- | ---: | ---: | ---: |
-| Logistic regression | 0.0302 | 0.0172 | 0.9417 |
-| **XGBoost** | **0.2349** | **0.1525** | **0.9759** |
-| EBM | 0.1294 | 0.0556 | 0.9674 |
+For each model, the notebook chooses the threshold with the best **validation F1**, then applies that same threshold to the later reporting period. It chooses the model with the best validation AP. The later-period results are:
 
-Validation AP selects XGBoost. All three models use the same 45 encoded features and positive-class weight of 10. Logistic regression is linear; XGBoost can learn interactions; EBM uses nonlinear additive effects with interactions disabled. We show logistic coefficients, one XGBoost Tree SHAP breakdown, and EBM term importance in section 7. Explanations describe model behavior, not why IBM assigned a label.
+| Model | Validation AP | Later AP | Later ROC-AUC | Later precision | Later recall | Later F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic regression | 0.0302 | 0.0172 | 0.9417 | 0.0238 | 0.5143 | 0.0454 |
+| **XGBoost** | **0.2349** | **0.1525** | **0.9759** | **0.1960** | 0.2398 | **0.2157** |
+| EBM | 0.1294 | 0.0556 | 0.9674 | 0.0967 | 0.2193 | 0.1342 |
 
-**Top 100 is one example review capacity, not the best universal AML metric.** Here each validation or reporting window spans two days. Precision is the share of reviewed alerts with positive labels; recall is the share of all positive labels found. The notebook displays the tradeoff for XGBoost:
+Validation AP selects XGBoost. Its validation-selected threshold is **0.3486**. On September 9–10 it raises **597 alerts**: **117 true positives**, **480 false positives**, and **371 missed positive labels**. The notebook displays the full confusion matrix. These counts make clear that even the improved model is imperfect.
 
-| Reporting-period alerts reviewed | Positives found | Precision | Recall |
-| ---: | ---: | ---: | ---: |
-| 100 | 45 | 45.0% | 9.22% |
-| 500 | 104 | 20.8% | 21.31% |
-| 1,000 | 152 | 15.2% | 31.15% |
-
-A team would choose its alert budget from actual analyst capacity and review cost, often for a defined day or week. For the class comparison, use **AP** as the main model-ranking metric and show **precision and recall at several plausible budgets**. Report the positive-label rate as a baseline. Avoid accuracy as the headline metric for these rare labels.
+All three models use the same 45 encoded features and positive-class weight of 10. Logistic regression is linear; XGBoost can learn interactions; EBM uses nonlinear additive effects with interactions disabled. We show logistic coefficients, one XGBoost Tree SHAP breakdown, and EBM term importance in section 7. Explanations describe model behavior, not why IBM assigned a label. A bank would set its alert threshold using its own risk and review capacity; maximizing F1 is a transparent classroom choice, **not a regulatory requirement**.
 
 ## Limits and bank context
 
 This is an exploratory comparison on sampled synthetic data. The history counts omit half of eligible rows, September 11–18 is excluded, the reporting period was consulted during revisions, and model scores are **not calibrated probabilities**. No score or synthetic label is an investigator decision. These are meaningful limitations for a class report.
 
+The CSV has synthetic laundering labels, but no investigation outcomes or SAR decisions. The notebook can calculate classifier precision and recall against those synthetic labels; it cannot measure a bank's actual SAR conversion rate or investigation quality. The [IBM dataset paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) notes that its complete synthetic ground truth differs from real AML data, where many laundering transactions are never detected.
+
 Banks tailor suspicious-activity monitoring to their risks. They may combine transaction reports, rules or intelligent surveillance, and referrals; investigators then review customer and transaction context before making a Suspicious Activity Report decision. The [FFIEC BSA/AML Examination Manual](https://bsaaml.ffiec.gov/manual/AssessingComplianceWithBSARegulatoryRequirements/04) describes this broader workflow. The notebook covers only transaction ranking. Current [interagency model-risk guidance](https://www.federalreserve.gov/supervisionreg/srletters/SR2602.htm) also discusses appropriate testing, limitations, and ongoing monitoring for bank models.
+
+Adding relevant behavior features is normal in AML monitoring: the FFIEC manual describes systems that compare activity with account history and peers. It does **not** prescribe using every raw column or a fixed number of features. It expects monitoring criteria to match the bank's risk profile and to be reviewed and tested. The [2026 interagency model-risk guidance](https://www.federalreserve.gov/supervisionreg/srletters/SR2602a1.pdf) calls for data and method choices aligned with model purpose, attention to input quality, and appropriate validation. The CSV has no customer-risk, occupation, geography, or due-diligence data; those cannot be honestly added from this source.
 
 ### Databricks and dbt
 
