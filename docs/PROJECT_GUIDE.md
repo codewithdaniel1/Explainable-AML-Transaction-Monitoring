@@ -12,10 +12,11 @@ The real purpose of AML monitoring is to find potentially suspicious behavior ea
 | --- | --- | --- |
 | **1–2** | Load a reproducible 50% sample of transactions before September 11. | Use more labeled and normal activity while keeping a laptop-friendly notebook. |
 | **3** | Create current-transaction fields, earlier sender/receiver/pair counts, and the sender's earlier typical payment amount. | Capture prior behavior without using labels. |
-| **4** | Split by time and encode categories. | Train on September 1–6, select on September 7–8, and report September 9–10 separately. |
+| **4** | Split by time and encode categories. | Train on September 1–6, select on September 7–8, and report September 9–10 separately; show row-count percentages. |
 | **5** | Fit the three models using training rows. | Compare linear, tree, and additive approaches on the same encoded columns. |
-| **6** | Show average precision, ROC-AUC, precision, recall, F1, false positive rate, and a confusion matrix. | Evaluate ranking and binary alerts using thresholds selected on validation data. |
-| **7–8** | Show model explanations and limits. | Explain scores without treating them as conclusions about a real customer. |
+| **6** | Show average precision, precision, recall, F1, false positive rate, alert counts, and a confusion matrix. | Evaluate ranking and binary alerts using thresholds selected on validation data. |
+| **7** | Give logistic regression, XGBoost, and EBM their own result tables, four-metric charts, and feature explanations. | Make each model's precision–recall tradeoff and alert workload visible. |
+| **8** | Show the experiment's limits. | Keep synthetic scores separate from real AML decisions. |
 
 The raw CSV remains at `data/raw/HI-Small_Trans.csv`. Tables and charts stay in the notebook; it creates no metrics JSON, predictions CSV, or `results/` directory.
 
@@ -23,13 +24,13 @@ The raw CSV remains at `data/raw/HI-Small_Trans.csv`. Tables and charts stay in 
 
 The HI-Small CSV contains **5,078,345** transactions. This run samples 50% of rows before September 11 using seed 42: **2,539,464 rows and 2,271 positive labels**. The fixed windows are:
 
-| Period | Dates in 2022 | Rows | Positive labels |
-| --- | --- | ---: | ---: |
-| Training | September 1–6 | 1,625,750 | 1,260 |
-| Validation | September 7–8 | 482,608 | 523 |
-| Reporting period | September 9–10 | 431,106 | 488 |
+| Period | Dates in 2022 | Rows | Share of modeled sample | Positive labels |
+| --- | --- | ---: | ---: | ---: |
+| Training | September 1–6 | 1,625,750 | **64.02%** | 1,260 |
+| Validation | September 7–8 | 482,608 | **19.00%** | 523 |
+| Later test/reporting | September 9–10 | 431,106 | **16.98%** | 488 |
 
-This is a **time-based evaluation**, not a time-series forecasting model. Training on earlier transactions and evaluating on later activity resembles the intended use of monitoring. The original [IBM benchmark paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) also uses a temporal split and computes graph features from past activity to avoid future information reaching earlier rows.
+These shares are computed from the **2,539,464 sampled eligible rows**, not from the entire raw CSV. The fixed date boundaries produce about 64/19/17 rather than an exact 60/20/20 split. This is a **time-based evaluation**, not a time-series forecasting model. Training on earlier transactions and evaluating on later activity resembles the intended use of monitoring. The original [IBM benchmark paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) also uses a temporal split and computes graph features from past activity to avoid future information reaching earlier rows.
 
 We exclude September 11–18 because those eight days contain only **1,108 rows, 655 labeled positive**, a sharp change from the preceding millions of rows. This means the notebook does **not** show how a model handles that shift. A real monitoring process would need to examine it. The reporting period was also inspected during this project's feature and weighting revisions, so the current figures are **exploratory**, not an untouched final estimate.
 
@@ -86,15 +87,17 @@ These four percentages are **our educational targets**, not a bank's required th
 
 ## Read the revised results
 
-The notebook uses established classification measures: **average precision (AP)** and **ROC-AUC** for ranking, and **precision, recall, F1, false positive rate, and a confusion matrix** for alerts at an explicit threshold. Precision is `TP / (TP + FP)`, recall is `TP / (TP + FN)`, F1 is their harmonic mean, and false positive rate is `FP / (FP + TN)`. The [IBM benchmark](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) emphasizes minority-class F1, precision, and recall because accuracy is misleading when labels are rare. The reporting-period positive-label rate is **0.00113**, the random-ranking baseline for AP. [scikit-learn's precision–recall guide](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html) explains AP and the precision–recall tradeoff.
+The notebook uses **average precision (AP)** for ranking and **precision, recall, F1, false positive rate, alert counts, and a confusion matrix** for alerts at an explicit threshold. Precision is `TP / (TP + FP)`, recall is `TP / (TP + FN)`, F1 is their harmonic mean, and false positive rate is `FP / (FP + TN)`. The [IBM benchmark](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) emphasizes minority-class F1, precision, and recall because accuracy is misleading when labels are rare. The reporting-period positive-label rate is **0.00113**, the random-ranking baseline for AP. [scikit-learn's precision–recall guide](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html) explains AP and the precision–recall tradeoff.
+
+Section 7 of the notebook gives **each model its own chart** for validation and later-test precision, recall, F1, and FPR. FPR uses a separate vertical scale because it is much smaller than the other rates. AP and alert/true/false counts stay in the adjacent model-specific table. These are measures we can compute from the synthetic labels; the CSV cannot supply priority-risk coverage or SAR quality feedback recommended for real monitoring by [Wolfsberg](https://wolfsberg-group.org/resources/195/202).
 
 For each model, the notebook chooses the threshold with the best **validation F1**, then applies that same threshold to the later reporting period. It chooses the model with the best validation AP. The later-period results are:
 
-| Model | Validation AP | Later AP | Later ROC-AUC | Later precision | Later recall | Later F1 | Later FPR |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Logistic regression | 0.0303 | 0.0171 | 0.9423 | 0.0232 | 0.4529 | 0.0441 | 2.165% |
-| **XGBoost** | **0.4427** | **0.3282** | **0.9772** | 0.3576 | **0.3627** | **0.3601** | 0.0738% |
-| EBM | 0.3829 | 0.2756 | 0.9711 | **0.4753** | 0.2561 | 0.3329 | **0.0320%** |
+| Model | Validation AP | Later AP | Later precision | Later recall | Later F1 | Later FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic regression | 0.0303 | 0.0171 | 0.0232 | **0.4529** | 0.0441 | 2.165% |
+| **XGBoost** | **0.4427** | **0.3282** | 0.3576 | 0.3627 | **0.3601** | 0.0738% |
+| EBM | 0.3829 | 0.2756 | **0.4753** | 0.2561 | 0.3329 | **0.0320%** |
 
 Validation AP selects XGBoost. Its validation-selected threshold is **0.3109**. On September 9–10 it raises **495 alerts**: **177 true positives**, **318 false positives**, and **311 missed positive labels**. Its false positive rate is `318 / 430,618 = 0.0738%`. All four classroom goals are met on this later period. Recall is still only **36.3%** of known synthetic positives, so meeting the goal does not imply complete coverage.
 
