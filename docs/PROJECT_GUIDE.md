@@ -6,13 +6,15 @@ The [notebook](../aml_modeling.ipynb) contains the code and saved outputs for th
 
 Can logistic regression, XGBoost, and an Explainable Boosting Machine (EBM) rank IBM's **synthetic** laundering-labeled transactions for review? A high score suggests a row to inspect; it does not prove laundering.
 
+The real purpose of AML monitoring is to find potentially suspicious behavior early enough for investigators to assess it and, when appropriate, provide useful reports to authorities. A model should help cover the institution's important risks while producing alerts investigators can reasonably review. Classifier scores alone cannot establish that outcome.
+
 | Section | What happens | Why |
 | --- | --- | --- |
 | **1–2** | Load a reproducible 50% sample of transactions before September 11. | Use more labeled and normal activity while keeping a laptop-friendly notebook. |
-| **3** | Create current-transaction fields and earlier sender, receiver, and sender–receiver counts. | Capture a small part of the transaction network without using labels. |
+| **3** | Create current-transaction fields, earlier sender/receiver/pair counts, and the sender's earlier typical payment amount. | Capture prior behavior without using labels. |
 | **4** | Split by time and encode categories. | Train on September 1–6, select on September 7–8, and report September 9–10 separately. |
-| **5** | Fit the three models using training rows. | Compare linear, tree, and additive approaches on the same 45 encoded columns. |
-| **6** | Show average precision, ROC-AUC, precision, recall, F1, and a confusion matrix. | Evaluate ranking and binary alerts using thresholds selected on validation data. |
+| **5** | Fit the three models using training rows. | Compare linear, tree, and additive approaches on the same encoded columns. |
+| **6** | Show average precision, ROC-AUC, precision, recall, F1, false positive rate, and a confusion matrix. | Evaluate ranking and binary alerts using thresholds selected on validation data. |
 | **7–8** | Show model explanations and limits. | Explain scores without treating them as conclusions about a real customer. |
 
 The raw CSV remains at `data/raw/HI-Small_Trans.csv`. Tables and charts stay in the notebook; it creates no metrics JSON, predictions CSV, or `results/` directory.
@@ -34,7 +36,7 @@ We exclude September 11–18 because those eight days contain only **1,108 rows,
 ## What the model sees
 
 - **Current transaction:** log paid amount, log received amount, hour, same-bank flag, same-account flag, payment format, payment currency, and receiving currency.
-- **Earlier sampled activity:** `prior_sender_count`, `prior_receiver_count`, and `prior_pair_count` count earlier transactions for the sender, receiver, and sender–receiver relationship. Rows with the same timestamp do not count one another.
+- **Earlier sampled activity:** `prior_sender_count`, `prior_receiver_count`, and `prior_pair_count` count earlier transactions for the sender, receiver, and sender–receiver relationship. `log_prior_sender_mean_amount` is the log of one plus that sender's average earlier payment in the same currency; it is zero with no such history. Rows with the same timestamp do not count one another.
 - **Account and bank IDs:** kept in the working `transactions` table and used to form history and relationship features. The models do not receive raw IDs as predictor columns.
 
 All **11 original CSV fields** are read. Here is where each one goes:
@@ -44,12 +46,12 @@ All **11 original CSV fields** are read. Here is where each one goes:
 | `Timestamp` | Time split, transaction hour, and strictly earlier history. |
 | `From Bank`, sender `Account` | Sender identity for past-activity counts and same-bank/account flags. |
 | `To Bank`, receiver `Account` (`Account.1` in pandas) | Receiver and sender–receiver history; same-bank/account flags. |
-| `Amount Paid`, `Payment Currency` | Log paid amount and payment-currency category. |
+| `Amount Paid`, `Payment Currency` | Log paid amount, payment-currency category, and earlier same-currency average amount for the sender. |
 | `Amount Received`, `Receiving Currency` | Log received amount and receiving-currency category. |
 | `Payment Format` | Encoded payment-format category. |
 | `Is Laundering` | Training/evaluation label only; never a predictor. |
 
-These history counts are incomplete because half of eligible transactions were left out. They are a simple approximation of network context. The [IBM paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) uses richer graph features, including vertex statistics and cycle patterns. It also **excludes raw account IDs as model predictors** to prevent learning the IDs themselves. That is a modeling choice, not a regulatory ban. Its published F1 results use a different feature pipeline and split, so they are **not directly comparable** with this notebook's F1.
+These history features are incomplete because half of eligible transactions were left out. They are a simple approximation of account behavior and network context. The [IBM paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) uses richer graph features, including vertex statistics and cycle patterns. It also **excludes raw account IDs as model predictors** to prevent learning the IDs themselves. That is a modeling choice, not a regulatory ban. Its published F1 results use a different feature pipeline and split, so they are **not directly comparable** with this notebook's F1.
 
 ## Why the old results were weak
 
@@ -62,25 +64,41 @@ At 50% sampling and XGBoost weight 10, these controlled feature checks show wher
 | Previous simple features | 0.0602 | 0.0535 |
 | Plus received amount, currency, and same-account flag | 0.0627 | 0.0576 |
 | Plus receiver and pair history counts | 0.2164 | 0.1441 |
-| All revised features | **0.2349** | **0.1525** |
+| All previous transaction and history features | 0.2349 | 0.1525 |
+| Previous features plus sender's earlier same-currency mean payment | **0.4427** | **0.3282** |
 
-The main missing signal was **earlier relationship activity**, not just more rows or extra current-transaction fields. This table describes these experiments; it does not prove the same improvement on another dataset or a truly fresh time period.
+Earlier relationship activity and the sender's **typical earlier payment size** provided the largest gains. On validation, the one added average-amount feature raised XGBoost F1 from **0.2965** to **0.4766**. We also tried daily activity counts and distinct-counterparty counts; they did not improve this validation setup, so this MVP keeps one new feature. These comparisons do not prove the same improvement on another dataset or a truly fresh time period.
+
+## What performance should this project aim for?
+
+**There is no universal regulatory minimum** such as “AML models must have 80% precision” or a fixed recall, F1, or false positive rate. The [FFIEC BSA/AML Examination Manual](https://bsaaml.ffiec.gov/manual/AssessingComplianceWithBSARegulatoryRequirements/04) describes monitoring that fits a bank's risk profile, followed by investigation and periodic review of thresholds. The [Wolfsberg Group's 2025 monitoring statement](https://wolfsberg-group.org/resources/195/202) lists precision and recall **for consideration alongside** priority-risk coverage, broader risk indicators, SAR quality feedback, and downstream investigation. The [2026 U.S. interagency model-risk guidance](https://www.federalreserve.gov/supervisionreg/srletters/SR2602a1.pdf) calls for testing aligned with model purpose and for validation and monitoring; it does not set AML classifier percentages. Those sources support bank-specific acceptance criteria, not a single industry cutoff.
+
+For **this synthetic class project**, we set this illustrative goal *before running the revised feature on September 9–10*:
+
+| Measure on September 9–10 | Class-project goal | Why it matters |
+| --- | ---: | --- |
+| Precision | At least **30%** | At least 3 of 10 alerts match a positive synthetic label. |
+| Recall | At least **30%** | Detect at least 3 of 10 positive synthetic labels. |
+| F1 | At least **0.30** | Keep precision and recall reasonably balanced. |
+| False positive rate | Below **0.1%** | Fewer than 10 false alerts per 10,000 normal transactions. |
+
+These four percentages are **our educational targets**, not a bank's required thresholds. Even a 0.1% false positive rate can create many false alerts at bank scale, so the notebook also shows **alert count** and the confusion matrix. In actual AML work, labels are incomplete and SAR quality, investigator capacity, risk coverage, and missed-risk reviews would matter as well. Here, `Is Laundering` is a complete synthetic label for this exercise; it is not a confirmed SAR outcome.
 
 ## Read the revised results
 
-There is **no regulator-prescribed list of AML classifier metrics** in the guidance reviewed here. This notebook uses established classification measures: **average precision (AP)** and **ROC-AUC** for ranking, and **precision, recall, F1, and a confusion matrix** for alerts at an explicit threshold. The [IBM benchmark](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) emphasizes minority-class F1, precision, and recall because accuracy is misleading when labels are rare. The reporting-period positive-label rate is **0.00113**, the random-ranking baseline for AP. [scikit-learn's precision–recall guide](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html) explains AP and the precision–recall tradeoff.
+The notebook uses established classification measures: **average precision (AP)** and **ROC-AUC** for ranking, and **precision, recall, F1, false positive rate, and a confusion matrix** for alerts at an explicit threshold. Precision is `TP / (TP + FP)`, recall is `TP / (TP + FN)`, F1 is their harmonic mean, and false positive rate is `FP / (FP + TN)`. The [IBM benchmark](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) emphasizes minority-class F1, precision, and recall because accuracy is misleading when labels are rare. The reporting-period positive-label rate is **0.00113**, the random-ranking baseline for AP. [scikit-learn's precision–recall guide](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html) explains AP and the precision–recall tradeoff.
 
 For each model, the notebook chooses the threshold with the best **validation F1**, then applies that same threshold to the later reporting period. It chooses the model with the best validation AP. The later-period results are:
 
-| Model | Validation AP | Later AP | Later ROC-AUC | Later precision | Later recall | Later F1 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Logistic regression | 0.0302 | 0.0172 | 0.9417 | 0.0238 | 0.5143 | 0.0454 |
-| **XGBoost** | **0.2349** | **0.1525** | **0.9759** | **0.1960** | 0.2398 | **0.2157** |
-| EBM | 0.1294 | 0.0556 | 0.9674 | 0.0967 | 0.2193 | 0.1342 |
+| Model | Validation AP | Later AP | Later ROC-AUC | Later precision | Later recall | Later F1 | Later FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic regression | 0.0303 | 0.0171 | 0.9423 | 0.0232 | 0.4529 | 0.0441 | 2.165% |
+| **XGBoost** | **0.4427** | **0.3282** | **0.9772** | 0.3576 | **0.3627** | **0.3601** | 0.0738% |
+| EBM | 0.3829 | 0.2756 | 0.9711 | **0.4753** | 0.2561 | 0.3329 | **0.0320%** |
 
-Validation AP selects XGBoost. Its validation-selected threshold is **0.3486**. On September 9–10 it raises **597 alerts**: **117 true positives**, **480 false positives**, and **371 missed positive labels**. The notebook displays the full confusion matrix. These counts make clear that even the improved model is imperfect.
+Validation AP selects XGBoost. Its validation-selected threshold is **0.3109**. On September 9–10 it raises **495 alerts**: **177 true positives**, **318 false positives**, and **311 missed positive labels**. Its false positive rate is `318 / 430,618 = 0.0738%`. All four classroom goals are met on this later period. Recall is still only **36.3%** of known synthetic positives, so meeting the goal does not imply complete coverage.
 
-All three models use the same 45 encoded features and positive-class weight of 10. Logistic regression is linear; XGBoost can learn interactions; EBM uses nonlinear additive effects with interactions disabled. We show logistic coefficients, one XGBoost Tree SHAP breakdown, and EBM term importance in section 7. Explanations describe model behavior, not why IBM assigned a label. A bank would set its alert threshold using its own risk and review capacity; maximizing F1 is a transparent classroom choice, **not a regulatory requirement**.
+All three models use the same **46 encoded features** and positive-class weight of 10. Logistic regression is linear; XGBoost can learn interactions; EBM uses nonlinear additive effects with interactions disabled. We show logistic coefficients, one XGBoost Tree SHAP breakdown, and EBM term importance in section 7. Explanations describe model behavior, not why IBM assigned a label. A bank would set its alert threshold using its own risk and review capacity; maximizing F1 is a transparent classroom choice, **not a regulatory requirement**.
 
 ## Limits and bank context
 
