@@ -7,9 +7,9 @@ from aml_monitoring.evaluation import chronological_split, top_k_metrics
 from aml_monitoring.features import build_features
 
 
-def _transaction(timestamp, amount, receiver="R1", label=0):
+def _transaction(timestamp, amount, receiver="R1", label=0, currency="USD"):
     return [timestamp, "001", "S1", "002", receiver, amount, "USD", amount,
-            "USD", "Wire", label]
+            currency, "Wire", label]
 
 
 def test_history_uses_strictly_earlier_timestamp_and_expires():
@@ -27,6 +27,19 @@ def test_history_uses_strictly_earlier_timestamp_and_expires():
     assert features.loc[2, "prior_avg_amount_7d"] == pytest.approx(150)
     assert features.loc[2, "new_counterparty_7d"] == 0
     assert features.loc[3, "prior_txn_count_7d"] == 0
+
+
+def test_amount_history_only_uses_matching_payment_currency():
+    frame = normalize_transactions(pd.DataFrame([
+        _transaction("2024-01-01 00:00", 100, currency="USD"),
+        _transaction("2024-01-01 01:00", 1000, currency="EUR"),
+        _transaction("2024-01-01 02:00", 200, currency="USD"),
+    ], columns=IBM_COLUMNS))
+    features = build_features(frame)
+    assert features.loc[2, "prior_txn_count_24h"] == 2
+    assert features.loc[2, "prior_amount_24h"] == pytest.approx(100)
+    assert features.loc[2, "prior_avg_amount_7d"] == pytest.approx(100)
+    assert features.loc[2, "amount_vs_prior_avg_7d"] == pytest.approx(2)
 
 
 def test_csv_loader_keeps_distinct_account_columns(tmp_path):

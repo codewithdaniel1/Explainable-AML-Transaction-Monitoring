@@ -22,28 +22,34 @@ FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 class _SenderHistory:
     day: deque = field(default_factory=deque)
     week: deque = field(default_factory=deque)
-    day_amount: float = 0.0
-    week_amount: float = 0.0
+    day_amount_by_currency: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    week_amount_by_currency: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    week_count_by_currency: Counter = field(default_factory=Counter)
     counterparties: Counter = field(default_factory=Counter)
 
     def expire(self, now: pd.Timestamp) -> None:
         day_start = now - pd.Timedelta(days=1)
         week_start = now - pd.Timedelta(days=7)
         while self.day and self.day[0][0] < day_start:
-            _, amount = self.day.popleft()
-            self.day_amount -= amount
+            _, amount, currency = self.day.popleft()
+            self.day_amount_by_currency[currency] -= amount
         while self.week and self.week[0][0] < week_start:
-            _, amount, receiver = self.week.popleft()
-            self.week_amount -= amount
+            _, amount, currency, receiver = self.week.popleft()
+            self.week_amount_by_currency[currency] -= amount
+            self.week_count_by_currency[currency] -= 1
+            if self.week_count_by_currency[currency] == 0:
+                del self.week_count_by_currency[currency]
+                del self.week_amount_by_currency[currency]
             self.counterparties[receiver] -= 1
             if self.counterparties[receiver] == 0:
                 del self.counterparties[receiver]
 
-    def add(self, now: pd.Timestamp, amount: float, receiver: str) -> None:
-        self.day.append((now, amount))
-        self.week.append((now, amount, receiver))
-        self.day_amount += amount
-        self.week_amount += amount
+    def add(self, now: pd.Timestamp, amount: float, currency: str, receiver: str) -> None:
+        self.day.append((now, amount, currency))
+        self.week.append((now, amount, currency, receiver))
+        self.day_amount_by_currency[currency] += amount
+        self.week_amount_by_currency[currency] += amount
+        self.week_count_by_currency[currency] += 1
         self.counterparties[receiver] += 1
 
 
@@ -64,7 +70,10 @@ def build_features(transactions: pd.DataFrame) -> pd.DataFrame:
             receiver = f"{txn.to_bank}:{txn.to_account}"
             history = histories[sender]
             history.expire(now)
-            prior_average = history.week_amount / len(history.week) if history.week else 0.0
+            currency = txn.payment_currency
+            currency_count = history.week_count_by_currency[currency]
+            prior_average = (history.week_amount_by_currency[currency] / currency_count
+                             if currency_count else 0.0)
             amount = float(txn.amount_paid)
             rows.append({
                 "log_amount_paid": np.log1p(amount),
@@ -72,7 +81,7 @@ def build_features(transactions: pd.DataFrame) -> pd.DataFrame:
                 "day_of_week": now.dayofweek,
                 "same_bank": int(txn.from_bank == txn.to_bank),
                 "prior_txn_count_24h": len(history.day),
-                "prior_amount_24h": max(0.0, history.day_amount),
+                "prior_amount_24h": max(0.0, history.day_amount_by_currency[currency]),
                 "prior_txn_count_7d": len(history.week),
                 "prior_avg_amount_7d": prior_average,
                 "amount_vs_prior_avg_7d": amount / prior_average if prior_average > 0 else 0.0,
@@ -81,7 +90,7 @@ def build_features(transactions: pd.DataFrame) -> pd.DataFrame:
                 "payment_currency": txn.payment_currency,
                 "receiving_currency": txn.receiving_currency,
             })
-            pending.append((sender, amount, receiver))
-        for sender, amount, receiver in pending:
-            histories[sender].add(now, amount, receiver)
+            pending.append((sender, amount, currency, receiver))
+        for sender, amount, currency, receiver in pending:
+            histories[sender].add(now, amount, currency, receiver)
     return pd.DataFrame.from_records(rows, columns=FEATURES)

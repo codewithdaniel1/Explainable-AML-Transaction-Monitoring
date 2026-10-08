@@ -90,7 +90,7 @@ def run(args: argparse.Namespace) -> None:
                 "label": labels[indexes],
                 "score": scores,
             }))
-        print(f"{name}: test PR-AUC={metrics[name]['test']['pr_auc']:.4f}; "
+        print(f"{name}: test average precision={metrics[name]['test']['pr_auc']:.4f}; "
               f"Recall@{metrics[name]['test']['alerts']}="
               f"{metrics[name]['test']['recall_at_k']:.4f}")
     _write_json(output / "metrics.json", metrics)

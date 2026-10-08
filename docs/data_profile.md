@@ -26,7 +26,7 @@ The command generates `results/ibm/data_profile.json` locally. That JSON is igno
 | 99th percentile amount paid | 13,524,530.71 in the source currency |
 | Maximum amount paid | 1,046,302,363,293.48 in the source currency |
 
-The amount statistics pool different currencies, including Bitcoin, so they are descriptive data checks, not comparable monetary values. Behavioral amount features and the fixed 10,000-unit rule need currency-specific handling before substantive model interpretation.
+The amount statistics pool different currencies, including Bitcoin, so they are descriptive data checks, not comparable monetary values. The current feature builder now keeps rolling amount history within each payment currency. The original demo rule still has a fixed 10,000-unit cutoff; the [sampled IBM pilot](STUDY_RESULTS.md) uses training-only thresholds by currency.
 
 ## Chronological split
 
@@ -45,3 +45,5 @@ From September 1 through 10, the data contains 5,077,237 transactions and 4,522 
 Before reporting model performance, examine daily label rates and transaction types, then define a defensible primary out-of-time window. Keep the late tail as a separate stress test if appropriate. Document the chosen window before tuning models and preserve an untouched final holdout.
 
 The raw file is synthetic. Its labels support a controlled ML comparison, not a claim of real-world AML deployment readiness.
+
+See the [sampled pilot](STUDY_RESULTS.md) for fixed September 1–10 model windows and a separate September 11–18 stress check. It samples modeling rows but computes behavioral history from all original transactions.

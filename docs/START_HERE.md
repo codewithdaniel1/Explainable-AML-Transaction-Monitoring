@@ -1,6 +1,6 @@
 # Start here: reading the AML project
 
-This guide follows one transaction from input to model evaluation. You can read it alongside the code in your IDE. The runnable model example uses **artificial demo data**; the full IBM dataset has been profiled but has not been used for a reported model comparison.
+This guide follows one transaction from input to model evaluation. You can read it alongside the code in your IDE. The introductory notebook example uses **artificial demo data**. A separate [10% sampled IBM pilot](STUDY_RESULTS.md) now reports an initial real-data comparison; it does not represent full-dataset performance.
 
 To run the steps as notebook cells with visible outputs, follow the [README setup instructions](../README.md), open [the pipeline walkthrough notebook](../notebooks/aml_pipeline_walkthrough.ipynb), and select this repository's `.venv/bin/python` kernel. The notebook contains a saved IBM profile snapshot. A fresh clone needs the separate download and profile commands from the README to regenerate those tables.
 
@@ -33,6 +33,7 @@ results/            save the profile, metrics, and predictions
 | ---: | --- | --- |
 | 1 | [README.md](../README.md) | The research question, setup commands, and current limits. |
 | 2 | [data_profile.md](data_profile.md) | What the full IBM dataset actually contains and the late-period label shift. |
+| 2a | [STUDY_RESULTS.md](STUDY_RESULTS.md) | How the sampled real-data pilot was designed and what its scores mean. |
 | 3 | [cli.py](../src/aml_monitoring/cli.py) | Read `main()` first, then `run()`. Notice where each other module is called. |
 | 4 | [data.py](../src/aml_monitoring/data.py) | `load_ibm_csv()` reads the file; `normalize_transactions()` checks types and sorts by time. `make_demo_transactions()` is only for a smoke test. |
 | 5 | [evaluation.py](../src/aml_monitoring/evaluation.py) | Read `chronological_split()` now. Come back to `top_k_metrics()` and `score_predictions()` after reading the models. |
@@ -61,13 +62,13 @@ For the real IBM file, see the exact dates and label counts in [data_profile.md]
 
 Example: if an account has no prior activity, sends two transactions at 10:00, and sends another at 11:00, the two 10:00 transactions see zero earlier transactions. The 11:00 transaction sees both. This prevents same-time CSV row order from creating artificial history.
 
-The current amount-history features mix source currencies. Treat them as exploratory until we group histories by currency or convert amounts consistently.
+Current rolling amount features group by payment currency. Sender transaction counts and new-counterparty history span currencies. The sampled IBM study uses DuckDB to compute these histories from **all** original transactions before selecting model rows.
 
 ### 4. Fit models on training rows
 
 `fit_model()` trains logistic regression, XGBoost, or EBM. Each gets the same feature columns. Logistic regression and XGBoost encode categorical values; EBM reads the named columns directly. The initial EBM uses main effects without learned interactions. Class weighting reflects how rare laundering labels are in the training period.
 
-`rule_scores()` supplies a simple fixed comparison using amount, 24-hour transaction count, and amount relative to prior history. Its thresholds are illustrative and need currency-specific revision.
+`rule_scores()` supplies the original **demo-only** fixed comparison using amount, 24-hour transaction count, and amount relative to prior history. The sampled study instead uses training-only, currency-specific 99th-percentile amount cutoffs in `study.py`.
 
 ### 5. Score validation and test rows
 
@@ -93,7 +94,7 @@ The command writes to the ignored `results/` folder. These generated files are n
 | `metrics.json` | How did each selected model score on validation and test? |
 | `predictions.csv` | Which transaction rows received which model scores? |
 
-So far, we have run the **full IBM data profile** in the original workspace. The artificial demo has run all four baselines as a code check. We have not reported model performance on the full IBM file.
+We have run the **full IBM data profile** and a **10% sampled pilot**. The artificial demo runs all four baselines as a code check. The full 5-million-row model experiment remains pending.
 
 ## Commands to try
 
@@ -108,16 +109,20 @@ From the project root after following the [README setup](../README.md):
 
 # Run checks for the parts most likely to produce misleading results.
 .venv/bin/python -m pytest -q
+
+# Run the sampled IBM study after downloading the full CSV.
+.venv/bin/python -m pip install -e '.[full-history]'
+.venv/bin/python -m aml_monitoring.study --csv data/raw/HI-Small_Trans.csv --fraction 0.10 --full-history --output results/study_full_history_10pct
+.venv/bin/python -m aml_monitoring.diagnostics --study-dir results/study_full_history_10pct
 ```
 
-The full-data model run is pending a defensible holdout design and currency-consistent features. Its present pandas implementation may require substantial RAM for 5 million rows.
+Read [the study report](STUDY_RESULTS.md) before interpreting the sampled scores. Account history is complete, but model fitting and the primary holdout use a 10% sample. A full-data comparison is still pending.
 
 ## What comes next
 
-1. Investigate the September 11–18 label shift and set the final test window.
-2. Make amount-history features currency-consistent.
-3. Run a transaction-only versus behavioral-feature comparison.
-4. Tune models using validation data, then evaluate the untouched holdout.
-5. Add SHAP and EBM explanations and write the class research report.
+1. Investigate the September 11–18 label shift and validate the chosen primary test window.
+2. Extend model fitting and holdout evaluation to all eligible original transactions.
+3. Repeat the feature comparison across seeds or windows and use account-aware uncertainty estimates.
+4. Tune and calibrate using validation data, then extend case-level explanation review.
 
 Databricks, dbt, MLflow, graph methods, and the investigator dashboard are later sections of the [complete project scope](PROJECT_SCOPE.md).

@@ -8,24 +8,29 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from .features import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+from .features import CATEGORICAL_FEATURES, FEATURES, NUMERIC_FEATURES
 
 
-def _encoded_features(scale: bool) -> ColumnTransformer:
+def _encoded_features(scale: bool, feature_columns: list[str]) -> ColumnTransformer:
     numeric = StandardScaler() if scale else "passthrough"
     return ColumnTransformer([
-        ("numeric", numeric, NUMERIC_FEATURES),
-        ("categorical", OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_FEATURES),
+        ("numeric", numeric, [name for name in NUMERIC_FEATURES if name in feature_columns]),
+        ("categorical", OneHotEncoder(handle_unknown="ignore"),
+         [name for name in CATEGORICAL_FEATURES if name in feature_columns]),
     ])
 
 
-def fit_model(name: str, x_train, y_train, seed: int = 42):
+def fit_model(name: str, x_train, y_train, seed: int = 42,
+              feature_columns: list[str] | None = None):
     """Fit on the training period only; return an estimator with predict_proba."""
     if len(np.unique(y_train)) != 2:
         raise ValueError("Training period must contain both classes")
+    feature_columns = feature_columns or FEATURES
+    if set(feature_columns) != set(x_train.columns):
+        raise ValueError("Training columns must match feature_columns")
     if name == "logistic":
         model = Pipeline([
-            ("prepare", _encoded_features(scale=True)),
+            ("prepare", _encoded_features(scale=True, feature_columns=feature_columns)),
             ("model", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed)),
         ])
         return model.fit(x_train, y_train)
@@ -35,7 +40,7 @@ def fit_model(name: str, x_train, y_train, seed: int = 42):
         positives = int(np.sum(y_train))
         negatives = len(y_train) - positives
         model = Pipeline([
-            ("prepare", _encoded_features(scale=False)),
+            ("prepare", _encoded_features(scale=False, feature_columns=feature_columns)),
             ("model", XGBClassifier(
                 n_estimators=200, max_depth=4, learning_rate=0.05,
                 subsample=0.8, colsample_bytree=0.8,
