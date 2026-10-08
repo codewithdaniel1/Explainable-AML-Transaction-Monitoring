@@ -1,21 +1,10 @@
 # Explainable AML Modeling
 
-A one-notebook ML class project using IBM's **synthetic HI-Small** transaction data. Open [aml_modeling.ipynb](aml_modeling.ipynb) to run the workflow. Read the short [project guide](docs/PROJECT_GUIDE.md) for an explanation of the steps, features, models, results, and limits.
+A simple, one-notebook ML class project using IBM's **synthetic HI-Small** transactions. Open [aml_modeling.ipynb](aml_modeling.ipynb) for the code, saved results, and charts. Read the [project guide](docs/PROJECT_GUIDE.md) for the reasoning behind each step and model.
 
-The notebook holds the code, tables, and charts. It saves outputs **inside the notebook**, with no `results/` folder, metrics JSON, predictions CSV, separate Python modules, app, or test suite. The raw dataset remains a local file because it is about 454 MiB and is not included in Git.
+The notebook compares **logistic regression, XGBoost, and Explainable Boosting Machine (EBM)**. It samples 10% of transactions before September 11, makes a chronological training/validation/test split, fits the models, compares ranking metrics, and displays basic explanations. It writes no metrics JSON, predictions CSV, or `results/` folder.
 
-## What runs today
-
-```text
-IBM HI-Small CSV → full-data profile and 10% modeling sample
-                 → DuckDB features from every earlier source transaction
-                 → rules, logistic regression, XGBoost, and EBM
-                 → validation selection, holdout metrics, explanations, case review
-```
-
-The notebook's numbered sections follow this order. The [project guide](docs/PROJECT_GUIDE.md) explains the purpose of each step, the feature and model choices, how to read the metrics, and the study's limitations. The saved notebook outputs can be read without downloading the CSV; rerunning the cells needs the raw file and can take several minutes.
-
-## Run it locally
+## Set up and run
 
 Use Python 3.11 or newer. From the repository folder:
 
@@ -25,9 +14,9 @@ python3.11 -m venv .venv
 .venv/bin/python -m ipykernel install --user --name aml-project --display-name 'Python (AML project .venv)'
 ```
 
-On macOS, XGBoost may need OpenMP (`brew install libomp`). In VS Code, open [aml_modeling.ipynb](aml_modeling.ipynb), select **Python (AML project .venv)** as the kernel, and run cells from top to bottom.
+On macOS, XGBoost may need OpenMP (`brew install libomp`). In VS Code, select **Python (AML project .venv)** as the notebook kernel. Run cells from top to bottom. The saved outputs can be read without rerunning the notebook.
 
-Download `HI-Small_Trans.csv` from [IBM's Kaggle dataset](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml) and place it at `data/raw/HI-Small_Trans.csv`. If you use Kaggle's CLI:
+Download `HI-Small_Trans.csv` from [IBM's Kaggle dataset](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml) and place it at `data/raw/HI-Small_Trans.csv`. With Kaggle's CLI:
 
 ```bash
 .venv/bin/python -m pip install kaggle
@@ -35,16 +24,21 @@ mkdir -p data/raw
 .venv/bin/kaggle datasets download ealtman2019/ibm-transactions-for-anti-money-laundering-aml -f HI-Small_Trans.csv -p data/raw --unzip
 ```
 
-Kaggle may require sign-in. The notebook checks the expected 5,078,345 rows, scans the entire CSV, and computes complete earlier account history with DuckDB. A fresh full run can take several minutes and needs temporary disk space. The notebook uses a 10% modeling sample with seed 42; it does **not** claim full-dataset model performance. Its saved outputs let you read the results before rerunning it.
+Kaggle may require sign-in. The raw CSV is about 454 MiB and is excluded from Git. The saved run used the file with SHA-256 `b19d39f515523373f991b689c07e11e7b0b95c17a2c27a87d91584ae16c5b040`; check with `shasum -a 256 data/raw/HI-Small_Trans.csv` if you need the same sample and results.
 
-For the exact source version used for the saved results, `shasum -a 256 data/raw/HI-Small_Trans.csv` should report `b19d39f515523373f991b689c07e11e7b0b95c17a2c27a87d91584ae16c5b040`. A different file or row order can change the sampled rows and metrics.
+## Read the notebook
 
-## Study boundary
+| Sections | What you will see |
+| --- | --- |
+| **1–3** | Imports, a 10% sample, and September 1–6 training / September 7–8 validation / September 9–10 test periods. |
+| **4** | A few current-transaction features and an earlier-sender count calculated **within the sample**. |
+| **5–6** | The three fitted models, average precision, ROC-AUC, Precision@100, Recall@100, and the highest-ranked test rows. |
+| **7–8** | Logistic coefficients, one XGBoost Tree SHAP example, EBM term importance, and limits of the experiment. |
 
-Training uses September 1–6, validation September 7–8, and the primary holdout September 9–10. September 11–18 has a sharp volume and label-rate shift, so it is a separate stress check. The notebook selects the model using validation average precision and compares rankings at a fixed 100-alert review capacity. Weighted scores are not calibrated probabilities, and synthetic labels do not establish real-world AML effectiveness.
+The sample-history count is **incomplete** because 90% of source transactions are not loaded. The notebook excludes the unusual September 11–18 period, whose transaction volume and label rate shift sharply. Model scores are not calibrated laundering probabilities, and synthetic labels are not real AML decisions. See the [guide](docs/PROJECT_GUIDE.md) before using the results in a class report.
 
-## Databricks and dbt status
+## Databricks and dbt
 
-The original proposal included Databricks and dbt as a possible engineering layer. **They are not implemented in this local MVP.** DuckDB performs the earlier-history calculations here. If cloud data engineering becomes a course requirement, the [guide's Databricks/dbt section](docs/PROJECT_GUIDE.md#databricks-and-dbt-current-status-and-a-concrete-later-path) outlines how to load the raw CSV, transform and test it with dbt, and verify that its features match the notebook before using them for modeling.
+The original proposal mentioned Databricks and dbt. **Neither is implemented in this one-notebook MVP.** The [project guide](docs/PROJECT_GUIDE.md#databricks-and-dbt) explains their possible roles if cloud data engineering becomes a course requirement. A working integration would need its own setup and would need to reproduce the notebook's data and feature definitions.
 
-IBM describes the source as simulated financial transactions for AML research. See [IBM's AML-Data repository](https://github.com/IBM/AML-Data) and the linked Kaggle distribution for source and license details. The CSV and temporary files are excluded from Git.
+IBM describes the source as simulated transactions for AML research. See [IBM's AML-Data repository](https://github.com/IBM/AML-Data) and the linked Kaggle distribution for source and license details.
