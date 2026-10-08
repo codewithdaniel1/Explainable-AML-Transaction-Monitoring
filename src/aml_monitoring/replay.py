@@ -61,26 +61,6 @@ def replay_study(study_dir: Path, daily_capacity: int = 100) -> dict:
         "note": "Replay uses saved scores. It does not retrain or score live transactions.",
     }
     (study_dir / "replay_summary.json").write_text(json.dumps(result, indent=2) + "\n")
-    lines = ["# Saved-score alert replay", "",
-             "This is a chronological replay of precomputed scores, not live scoring. The "
-             "cutoff was selected from **validation scores only** to target "
-             f"{daily_capacity} alerts per validation day; labels were not used to set it. "
-             "Actual alert volume can vary with changing transactions and scores.", "",
-             f"Model: **{model}**. Validation score cutoff: **{cutoff:.6f}**.", "",
-             "| Period | Rows | Alerts emitted | Positive labels among alerts |",
-             "| --- | ---: | ---: | ---: |"]
-    for name, info in result["replay_periods"].items():
-        lines.append(f"| {name} | {info['rows']:,} | {info['alerts']:,} | "
-                     f"{info['labels_in_alerts']:,} |")
-    lines += ["", "## Daily monitoring", "",
-              "| Date | Period | Transactions | Label rate | Alerts | Labels in alerts |",
-              "| --- | --- | ---: | ---: | ---: | ---: |"]
-    for row in daily.itertuples():
-        lines.append(f"| {row.date} | {row.period} | {row.transactions:,} | "
-                     f"{row.label_rate:.2%} | {row.alerts:,} | {row.labels_in_alerts:,} |")
-    lines += ["", "The late stress period is outside the primary holdout and has a major "
-              "label-rate shift. Generated alert rows and daily summaries are ignored by Git.", ""]
-    (study_dir / "replay_report.md").write_text("\n".join(lines))
     return result
 
 

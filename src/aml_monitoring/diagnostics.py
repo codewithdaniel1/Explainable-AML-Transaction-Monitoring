@@ -99,28 +99,6 @@ def analyze_study(directory: Path, repeats: int = 200) -> dict:
         "test_currency_segments": segments,
     }
     (directory / "diagnostics.json").write_text(json.dumps(result, indent=2) + "\n")
-    lines = [
-        "# Held-out diagnostics for the sampled pilot", "",
-        f"Validation-selected model: **{selected}**. The primary test average precision is "
-        f"**{selected_metrics['pr_auc']:.4f}**. A {repeats}-repeat stratified row bootstrap gives "
-        f"a descriptive 95% interval of **{lower:.4f}–{upper:.4f}**. It does not account for "
-        "account dependence, time dependence, or the loss of history caused by sampling.", "",
-        f"At a capacity of {k} alerts: **{result['true_positives_at_capacity']}** labeled positives "
-        f"and **{result['false_positives_at_capacity']}** labeled negatives were selected; "
-        f"**{result['missed_positives_below_capacity']}** labeled positives remained below the cutoff.", "",
-        "The generated `top_100_alerts.csv` and `highest_scored_missed_positives.csv` support "
-        "case review. `case_context.csv` joins those identifiers to the original synthetic "
-        "transaction fields when the raw CSV is available. These generated files are ignored by Git.", "",
-        "## Payment-currency segments", "",
-        "Small positive counts make individual segment AP estimates unstable; use these as error-analysis leads.", "",
-        "| Payment currency | Rows | Positives | Positive rate | AP |",
-        "| --- | ---: | ---: | ---: | ---: |",
-    ]
-    for row in segments:
-        ap = "—" if row["average_precision"] is None else f"{row['average_precision']:.4f}"
-        lines.append(f"| {row['payment_currency']} | {row['rows']:,} | {row['positives']} | "
-                     f"{row['positive_rate']:.3%} | {ap} |")
-    (directory / "diagnostics.md").write_text("\n".join(lines) + "\n")
     return result
 
 

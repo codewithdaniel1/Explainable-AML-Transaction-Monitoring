@@ -4,7 +4,7 @@ This guide follows the introductory pipeline from input to evaluation. Read it b
 
 For setup, data download, and commands, use the [README](../README.md). The notebook has saved outputs; a fresh clone must regenerate the ignored IBM profile and study files to rerun those sections.
 
-The [project scope map](PROJECT_SCOPE.md) lists all 14 sections we discussed and marks which parts are working, partial, or planned.
+The [MVP scope](PROJECT_SCOPE.md) defines what belongs in the class project and what remains optional.
 
 ## The big picture
 
@@ -22,12 +22,12 @@ models.py           score fixed rules; fit logistic regression / XGBoost / EBM
         ↓
 evaluation.py       calculate average precision and alert-capacity metrics
         ↓
-results/            save the profile, metrics, and predictions
+terminal/notebook   display the demo comparison and ranked examples
 ```
 
 `cli.py` is the conductor: it calls those modules in order. The command `.venv/bin/aml ...` starts in `cli.py` at `main()`, which parses command options and calls `run()`.
 
-The real-data study has a separate path: `study.py` samples modeling rows, `full_history.py` calculates features from **all** earlier IBM transactions, and `diagnostics.py` and `replay.py` analyze saved scores.
+The real-data study has a separate path: `study.py` samples modeling rows, `full_history.py` calculates features from **all** earlier IBM transactions, and `diagnostics.py` analyzes held-out errors. `replay.py` is an optional extension.
 
 ## Read these files in this order
 
@@ -42,7 +42,7 @@ The real-data study has a separate path: `study.py` samples modeling rows, `full
 | 7 | [features.py](../src/aml_monitoring/features.py) | Earlier sender activity and same-time exclusion. |
 | 8 | [models.py](../src/aml_monitoring/models.py) | Three ML models and the introductory fixed rules. |
 | 9 | [study.py](../src/aml_monitoring/study.py) and [full_history.py](../src/aml_monitoring/full_history.py) | Sampled model comparison with complete earlier history. |
-| 10 | [diagnostics.py](../src/aml_monitoring/diagnostics.py) and [replay.py](../src/aml_monitoring/replay.py) | Error review and validation-cutoff alert replay. |
+| 10 | [diagnostics.py](../src/aml_monitoring/diagnostics.py) | Held-out errors and uncertainty. |
 | 11 | [tests](../tests) | Small examples that check time safety, currencies, and alert counting. |
 
 ## Follow the actual execution, step by step
@@ -87,14 +87,8 @@ The fitted models return scores between 0 and 1 for validation and test transact
 
 For example, if the top 100 alerts contain 20 labeled transactions out of 50 total positives, Precision@100 is 20% and Recall@100 is 40%.
 
-### 6. Inspect saved outputs
+### 6. Inspect the results
 
-The command writes to the ignored `results/` folder. These generated files are not in the public GitHub repository:
+The demo command prints a brief comparison in the terminal. The notebook displays the full demo metrics table and highest-ranked example transactions without writing duplicate JSON or CSV files. The full IBM profile still saves `data_profile.json` so the notebook can read the 5-million-row summary without loading the CSV again.
 
-| File | What it answers |
-| --- | --- |
-| `data_profile.json` | How many rows, positives, currencies, formats, and missing values are there? What are the split dates and daily counts? |
-| `metrics.json` | How did each model score on validation and test? |
-| `predictions.csv` | Which transaction rows received which model scores? |
-
-We have run the **full IBM data profile** and a **10% sampled model study with complete earlier history**. The artificial demo is a code check. For exact reproduction commands, return to the [README](../README.md); for research interpretation, read the [study report](STUDY_RESULTS.md). The [scope map](PROJECT_SCOPE.md) tracks remaining work.
+We have run the **full IBM data profile** and a **10% sampled model study with complete earlier history**. The artificial demo is a code check. The sampled study saves local intermediate files for diagnostics; the notebook displays its model comparison, top alerts, and explanations. For reproduction commands, return to the [README](../README.md); for research interpretation, read the [study report](STUDY_RESULTS.md).

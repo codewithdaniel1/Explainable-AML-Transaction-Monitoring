@@ -218,48 +218,7 @@ def run_study(csv: Path, output: Path, fraction: float = .05,
     _write_json(output / "metrics.json", metrics)
     _write_json(output / "explanations.json", explanations)
     pd.concat(predictions, ignore_index=True).to_csv(output / "predictions.csv", index=False)
-    _write_report(output / "report.md", manifest, metrics)
     return {"manifest": manifest, "metrics": metrics}
-
-
-def _write_report(path: Path, manifest: dict, metrics: dict) -> None:
-    rows = [
-        "# IBM HI-Small sampled pilot study", "",
-        "This is a **sampled pilot**, not full-dataset model performance. The primary period is "
-        "September 1–10, 2022; September 11–18 is a separate stress period with a sharp label shift. "
-        + ("Behavioral features include every earlier transaction in the original CSV."
-           if manifest["full_history"] else
-           "The sample excludes most prior transactions, so behavioral history is incomplete."), "",
-        f"Original CSV rows read: {manifest['original_csv_rows']:,}. Primary sampling fraction: "
-        f"{manifest['sample_fraction_primary']:.1%}. Seed: {manifest['seed']}.", "",
-        "| Period | Calendar dates | Sampled rows | Positive labels |",
-        "| --- | --- | ---: | ---: |",
-    ]
-    dates = {"train": "Sep 1–6", "validation": "Sep 7–8",
-             "test": "Sep 9–10", "late_stress": "Sep 11–18"}
-    for name, info in manifest["periods"].items():
-        rows.append(f"| {name} | {dates[name]} | {info['rows']:,} | {info['positives']:,} |")
-    rows += ["", "## Model comparison", "",
-             "Average precision (AP) summarizes the precision–recall curve. The JSON key is `pr_auc`. "
-             "Alert capacity is fixed at 100 per period. Models and feature sets are selected using validation AP only.", "",
-             "| Model and features | Validation AP | Primary test AP | Test Recall@100 | Late stress AP |",
-             "| --- | ---: | ---: | ---: | ---: |"]
-    for name, values in metrics.items():
-        rows.append(f"| {name} | {values['validation']['pr_auc']:.4f} | "
-                    f"{values['test']['pr_auc']:.4f} | {values['test']['recall_at_k']:.4f} | "
-                    f"{values['late_stress']['pr_auc']:.4f} |")
-    selected = manifest["selected_by_validation_average_precision"]
-    rows += ["", f"Validation-selected specification: **{selected}**. Its primary test AP is "
-             f"**{metrics[selected]['test']['pr_auc']:.4f}**.", "",
-             "## Interpretation and limits", "",
-             "- The late period has a different prevalence and very low volume. Its metrics are a stress check, not a comparable holdout.",
-             ("- Primary rows were uniformly sampled across days, while behavioral history was computed from every original transaction. The test still contains only a sample of the primary period."
-              if manifest["full_history"] else
-              "- Randomly sampling primary rows preserves coverage across days but removes most account history. Behavioral features require a full-history run before research claims."),
-             "- The rules use training-only 99th-percentile thresholds by payment currency, plus prior count and relative amount. These are illustrative thresholds.",
-             "- Weighted model scores are not calibrated probabilities. Brier scores in the JSON are diagnostic.",
-             "- This synthetic dataset does not establish real-world AML effectiveness.", ""]
-    path.write_text("\n".join(rows))
 
 
 def main() -> None:

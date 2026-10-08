@@ -21,7 +21,7 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q
       - name: Demo pipeline
-        run: python -m aml_monitoring.cli --demo --output results/ci_demo
+        run: python -m aml_monitoring.cli --demo
       - name: Validate walkthrough notebook
         run: |
           python - <<'PY'

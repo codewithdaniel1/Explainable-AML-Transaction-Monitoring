@@ -6,9 +6,6 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-
 from .data import load_ibm_csv, make_demo_transactions
 from .evaluation import chronological_split, score_predictions
 from .features import FEATURES, build_features
@@ -25,8 +22,6 @@ def run(args: argparse.Namespace) -> None:
     )
     if args.max_rows is not None and not args.demo:
         print("DEVELOPMENT PREFIX: metrics from --max-rows are not research results")
-    output = Path(args.output)
-    output.mkdir(parents=True, exist_ok=True)
     split = chronological_split(transactions["timestamp"])
     profile = {
         "source": "artificial_demo" if args.demo else str(args.csv),
@@ -62,17 +57,21 @@ def run(args: argparse.Namespace) -> None:
             "first_timestamp": str(transactions.iloc[indexes]["timestamp"].min()),
             "last_timestamp": str(transactions.iloc[indexes]["timestamp"].max()),
         }
-    _write_json(output / "data_profile.json", profile)
-    print(json.dumps(profile, indent=2))
     if args.profile_only:
+        output = Path(args.output)
+        output.mkdir(parents=True, exist_ok=True)
+        _write_json(output / "data_profile.json", profile)
+        print(json.dumps(profile, indent=2))
+        print(f"Wrote data profile to {output / 'data_profile.json'}")
         return
+
+    print(f"Rows: {profile['rows']:,}; positive labels: {profile['positives']:,}")
 
     features = build_features(transactions)
     labels = transactions["is_laundering"].to_numpy()
     if any(profile["splits"][name]["positives"] == 0 for name in split):
         raise ValueError("A chronological period has no positive labels; inspect the data before training")
     train = split["train"]
-    predictions = []
     metrics = {}
     for name in args.models:
         model = None if name == "rules" else fit_model(name, features.iloc[train][FEATURES], labels[train], args.seed)
@@ -82,20 +81,9 @@ def run(args: argparse.Namespace) -> None:
             x = features.iloc[indexes][FEATURES]
             scores = rule_scores(x) if model is None else model.predict_proba(x)[:, 1]
             metrics[name][period] = score_predictions(labels[indexes], scores, args.alerts)
-            predictions.append(pd.DataFrame({
-                "source_row": indexes,
-                "timestamp": transactions.iloc[indexes]["timestamp"].to_numpy(),
-                "period": period,
-                "model": name,
-                "label": labels[indexes],
-                "score": scores,
-            }))
         print(f"{name}: test average precision={metrics[name]['test']['pr_auc']:.4f}; "
               f"Recall@{metrics[name]['test']['alerts']}="
               f"{metrics[name]['test']['recall_at_k']:.4f}")
-    _write_json(output / "metrics.json", metrics)
-    pd.concat(predictions, ignore_index=True).to_csv(output / "predictions.csv", index=False)
-    print(f"Wrote profile, metrics, and predictions to {output}")
 
 
 def main() -> None:
@@ -105,7 +93,7 @@ def main() -> None:
     source.add_argument("--demo", action="store_true", help="Use artificial smoke-test transactions")
     parser.add_argument("--demo-rows", type=int, default=1200)
     parser.add_argument("--max-rows", type=int, default=None, help="Development-only CSV prefix")
-    parser.add_argument("--output", default="results/initial")
+    parser.add_argument("--output", default="results/ibm", help="Profile output directory with --profile-only")
     parser.add_argument("--alerts", type=int, default=100, help="Fixed alert capacity per evaluation period")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--profile-only", action="store_true")

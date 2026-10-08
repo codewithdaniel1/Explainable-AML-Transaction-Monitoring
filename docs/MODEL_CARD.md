@@ -16,7 +16,7 @@ Inputs include log amount paid, hour, day of week, same-bank indicator, payment 
 
 The specification was selected by **validation average precision** among currency-aware rules and three ML algorithms with transaction-only and behavioral feature sets. The primary holdout contains 86,066 sampled rows and 103 positive labels. Average precision is **0.2245**; ROC-AUC is **0.9733**. At 100 alerts, 23 labels are found (23% precision; 22.3% recall). A descriptive 300-repeat stratified row bootstrap gave a 95% AP interval of **0.1468–0.3128**. The interval does not capture account or time dependence. Exact metrics and segment diagnostics are generated under ignored `results/study_full_history_10pct/`.
 
-The late stress period has 655 positive labels among 1,108 rows (59.1%), versus 0.1197% in the primary test. Its ranking metrics cannot be compared directly with the primary test. A saved-score replay uses a validation-only cutoff to study alert volume, but there is no probability calibration or prospective operational validation.
+The late stress period has 655 positive labels among 1,108 rows (59.1%), versus 0.1197% in the primary test. Its ranking metrics cannot be compared directly with the primary test. There is no probability calibration or prospective operational validation.
 
 ## Explanations
 

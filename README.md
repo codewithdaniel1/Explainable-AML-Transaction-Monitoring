@@ -10,7 +10,7 @@ Research code for ranking **synthetic** transactions for AML review. The class s
 - A [10% sampled IBM pilot](docs/STUDY_RESULTS.md) now compares seven rule/model and feature-set specifications with fixed calendar splits, separate late-period stress testing, Tree SHAP examples, diagnostics, and plots. DuckDB computes behavioral history from **all** original rows before sampled modeling rows are selected.
 - **No full-dataset model performance has been reported.** The pilot evaluates a sampled primary period with complete prior history, not every primary transaction.
 
-For a file-by-file explanation, read [Start here](docs/START_HERE.md). The [scope map](docs/PROJECT_SCOPE.md) tracks all 14 planned sections and their actual status.
+For a file-by-file explanation, read [Start here](docs/START_HERE.md). [MVP scope](docs/PROJECT_SCOPE.md) separates the class project from optional extensions.
 
 ## Set up a fresh clone
 
@@ -21,11 +21,11 @@ git clone https://github.com/codewithdaniel1/Explainable-AML-Transaction-Monitor
 cd Explainable-AML-Transaction-Monitoring
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev,notebook]'
-.venv/bin/aml --demo --output results/demo
+.venv/bin/aml --demo
 .venv/bin/python -m pytest -q
 ```
 
-On macOS, XGBoost may need the OpenMP runtime (`brew install libomp`). The artificial demo has an intentionally easy label pattern; its metrics verify execution and are **not** AML research findings.
+On macOS, XGBoost may need the OpenMP runtime (`brew install libomp`). The artificial demo prints a short model comparison without saving results files. Its intentionally easy label pattern verifies execution and is **not** an AML research finding.
 
 In VS Code, open [the notebook](notebooks/aml_pipeline_walkthrough.ipynb) and select this repository's `.venv/bin/python` kernel. If it does not appear, register it and reopen the kernel picker:
 
@@ -50,15 +50,9 @@ Kaggle may ask you to sign in. The extracted CSV is about 454 MiB; verify its SH
 
 The profile command writes `results/ibm/data_profile.json`. Open it for exact counts, dates, daily activity, currencies, payment formats, missing values, amount quantiles, and split diagnostics. Then rerun the notebook's profile cell to display its IBM tables.
 
-## Current pipeline and outputs
+## Current pipeline
 
-The CLI (`src/aml_monitoring/cli.py`) connects CSV loading, feature engineering, time splitting, models, and evaluation. Without `--profile-only`, it writes the following under the ignored output directory:
-
-| File | Contents |
-| --- | --- |
-| `data_profile.json` | Dataset and split summaries. |
-| `metrics.json` | Average precision (stored as `pr_auc`), ROC-AUC, Brier score, Precision@K, and Recall@K for validation and test. |
-| `predictions.csv` | Validation and test scores, labels, timestamps, model names, and row positions. |
+The CLI (`src/aml_monitoring/cli.py`) connects CSV loading, feature engineering, time splitting, models, and evaluation. Its demo and normal comparison commands print a summary without saving metrics or predictions. The [walkthrough notebook](notebooks/aml_pipeline_walkthrough.ipynb) displays the demo comparison and highest-ranked example transactions directly.
 
 The demo models fit on the earliest period only. The sampled IBM study uses fixed calendar windows and chooses a specification by validation average precision. Weighted scores should not be read as real-world laundering probabilities. The introductory CLI builds features in memory; the sampled study uses DuckDB for complete earlier history.
 
@@ -70,30 +64,31 @@ After downloading the CSV, these commands reproduce the [reported study](docs/ST
 .venv/bin/python -m pip install -e '.[full-history,visualize]'
 .venv/bin/python -m aml_monitoring.study --csv data/raw/HI-Small_Trans.csv --fraction 0.10 --seed 42 --full-history --output results/study_full_history_10pct
 .venv/bin/python -m aml_monitoring.diagnostics --study-dir results/study_full_history_10pct --repeats 300
-.venv/bin/python -m aml_monitoring.replay --study-dir results/study_full_history_10pct --daily-capacity 100
 ```
 
-The reported run uses about 507,000 sampled September 1–10 rows plus all 1,108 late-period rows. It writes metrics, predictions, explanations, diagnostics, and a saved-score alert replay under ignored `results/study_full_history_10pct/`. The [study report](docs/STUDY_RESULTS.md) explains the design and limits. Regenerate its figures with `.venv/bin/python -m aml_monitoring.plots`.
+The reported run uses about 507,000 sampled September 1–10 rows plus all 1,108 late-period rows. Unlike the small demo, this study needs ignored `metrics.json` and `predictions.csv` as intermediate inputs for diagnostics and plots. The notebook displays the model comparison and top alerts, so you do not need to open those files. The [study report](docs/STUDY_RESULTS.md) explains the design and limits. Regenerate its figures with `.venv/bin/python -m aml_monitoring.plots`.
 
-To review the generated synthetic alerts in a local dashboard:
+## Optional extensions
+
+The original broader project plan included alert replay and an investigator dashboard. Neither is required for the class-project MVP. To try them after the core study:
 
 ```bash
+.venv/bin/python -m aml_monitoring.replay --study-dir results/study_full_history_10pct --daily-capacity 100
 .venv/bin/python -m pip install -e '.[dashboard]'
 .venv/bin/streamlit run app/dashboard.py
 ```
 
-The dashboard compares specifications, shows ranked transactions, case context, a sender's earlier seven days and counterparties, and Tree SHAP examples. It saves optional local case notes under ignored `results/`. Read the [model card](docs/MODEL_CARD.md) for intended use and validation limits.
+The dashboard reads locally generated study results and can save optional synthetic case notes under ignored `results/`. Read the [model card](docs/MODEL_CARD.md) for intended use and validation limits.
 
 GitHub Actions CI runs unit tests, the artificial demo, and notebook validation on pushes and pull requests. It does not need or download the IBM CSV.
 
-## Next research work
+## Before the final class report
 
 1. Extend model training and primary evaluation from the 10% sample to all eligible transactions.
 2. Investigate the dataset's sharp volume and label-rate change after September 10; retain a documented primary holdout and separate stress period.
-3. Repeat experiments across seeds or windows, tune on validation data, calibrate scores, and estimate uncertainty with account and time dependence.
-4. Expand explanation and case review, then turn the sampled report into the final class report.
+3. Repeat the comparison across seeds or windows, review example explanations, and write the final class report.
 
-Databricks, dbt, MLflow, deep learning, graph-based detection, and live streaming remain separate planned sections in the [scope map](docs/PROJECT_SCOPE.md). The local dashboard and saved-score replay are initial investigation and monitoring interfaces.
+Databricks, dbt, MLflow, deep learning, graph-based detection, and live streaming are outside the [MVP scope](docs/PROJECT_SCOPE.md).
 
 ## Data source and repository hygiene
 

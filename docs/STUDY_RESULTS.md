@@ -41,10 +41,6 @@ The selected XGBoost specification found 23 of 103 labeled positives among 100 r
 
 The late stress period had 59.1% labeled positives, so its AP values cannot be compared directly with the primary test. The selected model's stress AP was 0.9010; this is a shift diagnostic, not evidence of improved model quality. Weighted model outputs are not calibrated real-world laundering probabilities.
 
-## Saved-score alert replay
-
-A separate chronological replay sets a score cutoff from **validation scores only** to target 100 alerts per validation day. On the two primary test days, it emitted **221 alerts**, containing **24 positive labels**. On the late stress period, it emitted **388 alerts**, containing **361 positive labels**; this large change is another sign that the later data behaves differently. The replay uses precomputed scores and is not live model scoring. Daily counts are generated in `replay_daily_monitoring.csv`.
-
 ## Explanations and error analysis
 
 The saved explanation artifact contains logistic coefficients, EBM term importance, XGBoost feature importance, and native XGBoost Tree SHAP contributions for five top-scored primary-test rows. [XGBoost's `pred_contribs` documentation](https://xgboost.readthedocs.io/en/stable/prediction.html) describes these as contributions to the raw model margin; here, that is log odds. For behavioral XGBoost, payment format had the largest measured feature importance; 24-hour and 7-day sender counts also appeared among the leading inputs. Importance and SHAP contributions describe model behavior in this sampled run, not causal drivers of laundering.
@@ -53,10 +49,10 @@ The diagnostic outputs include the top 100 alerts, the highest-scored missed pos
 
 ## Reproduce locally
 
-Follow the README's [data download](../README.md#download-and-profile-the-ibm-data) and [sampled-study commands](../README.md#run-the-sampled-ibm-pilot). The reported run uses fraction `0.10`, seed `42`, complete earlier history, a 300-repeat diagnostic bootstrap, and a 100-alert-per-day replay target.
+Follow the README's [data download](../README.md#download-and-profile-the-ibm-data) and [sampled-study commands](../README.md#run-the-sampled-ibm-pilot). The reported run uses fraction `0.10`, seed `42`, complete earlier history, and a 300-repeat diagnostic bootstrap.
 
-The study writes a manifest, metrics, predictions, explanations, and a report under ignored `results/study_full_history_10pct/`. Diagnostics adds alert, missed-positive, and case-context files; replay adds daily monitoring and emitted alerts. Reproducing the exact sample requires the same CSV version and row order; compare its SHA-256 with [the profiled file](data_profile.md). No generated predictions or account-level records are committed. The [model card](MODEL_CARD.md) records intended use and validation limits.
+The study writes a manifest, intermediate metrics and predictions, and explanations under ignored `results/study_full_history_10pct/`. Diagnostics adds alert, missed-positive, and case-context files. The [notebook](../notebooks/aml_pipeline_walkthrough.ipynb) displays the results. Reproducing the exact sample requires the same CSV version and row order; compare its SHA-256 with [the profiled file](data_profile.md). No generated predictions or account-level records are committed. The [model card](MODEL_CARD.md) records intended use and validation limits.
 
 ## What remains before a full research claim
 
-Evaluate the full primary period rather than a 10% sample. Repeat the comparison across several seeds or time windows and add account-aware uncertainty estimates. Inspect the late-period generation shift before interpreting any stress result. Add probability calibration on validation data, more rule designs, and case-level explanation review. These steps are tracked in the [scope map](PROJECT_SCOPE.md).
+Evaluate the full primary period rather than a 10% sample. Repeat the comparison across several seeds or time windows and add account-aware uncertainty estimates. Inspect the late-period generation shift before interpreting any stress result. Review case-level explanations. See the [MVP scope](PROJECT_SCOPE.md).
