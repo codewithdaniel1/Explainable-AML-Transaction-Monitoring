@@ -4,7 +4,7 @@ Research code for ranking **synthetic** transactions for AML review. The class s
 
 ## What works now
 
-- The IBM `HI-Small_Trans.csv` was downloaded and profiled in the original workspace. The [profile report](docs/data_profile.md) records 5,078,345 transactions and a major late-period label shift.
+- The [IBM data profile](docs/data_profile.md) records 5,078,345 transactions and a major late-period label shift. The raw CSV is local and excluded from Git.
 - The pipeline loads IBM-format CSVs, builds features from earlier transaction history, and makes chronological train/validation/test splits.
 - Fixed rules, logistic regression, XGBoost, and EBM run on a **small artificial demo**. The [walkthrough notebook](notebooks/aml_pipeline_walkthrough.ipynb) has saved outputs for each step and a snapshot of the IBM profile.
 - A [10% sampled IBM pilot](docs/STUDY_RESULTS.md) now compares seven rule/model and feature-set specifications with fixed calendar splits, separate late-period stress testing, Tree SHAP examples, diagnostics, and plots. DuckDB computes behavioral history from **all** original rows before sampled modeling rows are selected.
@@ -60,7 +60,7 @@ The CLI (`src/aml_monitoring/cli.py`) connects CSV loading, feature engineering,
 | `metrics.json` | Average precision (stored as `pr_auc`), ROC-AUC, Brier score, Precision@K, and Recall@K for validation and test. |
 | `predictions.csv` | Validation and test scores, labels, timestamps, model names, and row positions. |
 
-The demo models fit on the earliest period only. The demo reports validation and test metrics without tuning or probability calibration. The sampled IBM study uses fixed calendar windows and chooses a specification by validation average precision. Weighted scores should not be read as real-world laundering probabilities. The full-data modeling path remains a research work item; the pandas feature builder may require substantial RAM on 5 million rows.
+The demo models fit on the earliest period only. The sampled IBM study uses fixed calendar windows and chooses a specification by validation average precision. Weighted scores should not be read as real-world laundering probabilities. The introductory CLI builds features in memory; the sampled study uses DuckDB for complete earlier history.
 
 ## Run the sampled IBM pilot
 
@@ -91,7 +91,7 @@ GitHub Actions CI runs unit tests, the artificial demo, and notebook validation 
 1. Extend model training and primary evaluation from the 10% sample to all eligible transactions.
 2. Investigate the dataset's sharp volume and label-rate change after September 10; retain a documented primary holdout and separate stress period.
 3. Repeat experiments across seeds or windows, tune on validation data, calibrate scores, and estimate uncertainty with account and time dependence.
-4. Expand explanation and case review, then complete the class research report.
+4. Expand explanation and case review, then turn the sampled report into the final class report.
 
 Databricks, dbt, MLflow, deep learning, graph-based detection, and live streaming remain separate planned sections in the [scope map](docs/PROJECT_SCOPE.md). The local dashboard and saved-score replay are initial investigation and monitoring interfaces.
 

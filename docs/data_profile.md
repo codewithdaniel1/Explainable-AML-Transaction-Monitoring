@@ -1,16 +1,8 @@
 # IBM HI-Small transaction data profile
 
-Profile run: 2026-10-07. Source: [IBM's Kaggle distribution](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), file `HI-Small_Trans.csv`. This report records results from the original workspace. The raw CSV was downloaded to `data/raw/HI-Small_Trans.csv` there and is **not included in Git**. SHA-256 of the profiled CSV: `b19d39f515523373f991b689c07e11e7b0b95c17a2c27a87d91584ae16c5b040`.
+Profile run: 2026-10-07. Source: [IBM's Kaggle distribution](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), file `HI-Small_Trans.csv`. SHA-256: `b19d39f515523373f991b689c07e11e7b0b95c17a2c27a87d91584ae16c5b040`.
 
-For a fresh clone, follow the [download and setup instructions](../README.md#download-and-profile-the-ibm-data) before running the profile command below.
-
-Run:
-
-```bash
-.venv/bin/aml --csv data/raw/HI-Small_Trans.csv --profile-only --output results/ibm
-```
-
-The command generates `results/ibm/data_profile.json` locally. That JSON is ignored by Git; the tables below preserve the main results for readers of the public repository.
+The raw CSV and generated `results/ibm/data_profile.json` are ignored by Git. These tables preserve the main results; follow the [README](../README.md#download-and-profile-the-ibm-data) to regenerate the JSON.
 
 ## Dataset summary
 
@@ -22,9 +14,9 @@ The command generates `results/ibm/data_profile.json` locally. That JSON is igno
 | Missing values in the 11 source fields | 0 |
 | Payment formats | 7 |
 | Payment currencies | 15 |
-| Median amount paid | 1,414.54 in the source currency |
-| 99th percentile amount paid | 13,524,530.71 in the source currency |
-| Maximum amount paid | 1,046,302,363,293.48 in the source currency |
+| Median amount paid | 1,414.54 raw units (currencies mixed) |
+| 99th percentile amount paid | 13,524,530.71 raw units (currencies mixed) |
+| Maximum amount paid | 1,046,302,363,293.48 raw units (currencies mixed) |
 
 The amount statistics pool different currencies, including Bitcoin, so they are descriptive data checks, not comparable monetary values. The current feature builder now keeps rolling amount history within each payment currency. The original demo rule still has a fixed 10,000-unit cutoff; the [sampled IBM pilot](STUDY_RESULTS.md) uses training-only thresholds by currency.
 
@@ -36,14 +28,12 @@ The amount statistics pool different currencies, including Bitcoin, so they are 
 | Validation | 1,015,565 | 20.00% | 1,081 | 0.1064% | Sep 6, 13:37 to Sep 8, 16:12 |
 | Test | 1,015,564 | 20.00% | 1,797 | 0.1769% | Sep 8, 16:13 to Sep 18 |
 
-The split targets 60/20/20 by transaction count while keeping rows with the same timestamp together. All periods contain positive labels. The test label rate is more than twice the train rate, so prevalence-sensitive metrics and calibration require careful interpretation. These are **profile counts**, not model evaluation results.
+This is the introductory CLI's 60/20/20 **profile split**, which keeps equal timestamps together. It is **not** the calendar split used for the [sampled model study](STUDY_RESULTS.md). All periods contain positive labels. The test label rate is more than twice the train rate, so prevalence-sensitive metrics and calibration require care. These are counts, not model evaluation results.
 
 ## Temporal anomaly to investigate
 
 From September 1 through 10, the data contains 5,077,237 transactions and 4,522 positive labels (0.0891%). From September 11 through 18, it contains only **1,108 transactions, of which 655 are positive (59.1%)**. This abrupt change may reflect how the synthetic dataset was generated or ended; the profile alone does not establish the cause.
 
-Before reporting model performance, examine daily label rates and transaction types, then define a defensible primary out-of-time window. Keep the late tail as a separate stress test if appropriate. Document the chosen window before tuning models and preserve an untouched final holdout.
+The [sampled study](STUDY_RESULTS.md) uses September 1–10 for its primary comparison and keeps September 11–18 as a separate stress check. The cause of the shift still needs investigation before broader claims.
 
 The raw file is synthetic. Its labels support a controlled ML comparison, not a claim of real-world AML deployment readiness.
-
-See the [sampled pilot](STUDY_RESULTS.md) for fixed September 1–10 model windows and a separate September 11–18 stress check. It samples modeling rows but computes behavioral history from all original transactions.

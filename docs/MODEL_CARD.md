@@ -14,9 +14,9 @@ Inputs include log amount paid, hour, day of week, same-bank indicator, payment 
 
 ## Evaluation
 
-The specification was selected by **validation average precision** among currency-aware rules and three ML algorithms with transaction-only and behavioral feature sets. The untouched primary test contains 86,066 sampled rows and 103 positive labels. Average precision is **0.2245**; ROC-AUC is **0.9733**. At 100 alerts, 23 labels are found (23% precision; 22.3% recall). A descriptive 300-repeat stratified row bootstrap gave a 95% AP interval of **0.1468–0.3128**. The interval does not capture account or time dependence. Exact metrics and segment diagnostics are generated under ignored `results/study_full_history_10pct/`.
+The specification was selected by **validation average precision** among currency-aware rules and three ML algorithms with transaction-only and behavioral feature sets. The primary holdout contains 86,066 sampled rows and 103 positive labels. Average precision is **0.2245**; ROC-AUC is **0.9733**. At 100 alerts, 23 labels are found (23% precision; 22.3% recall). A descriptive 300-repeat stratified row bootstrap gave a 95% AP interval of **0.1468–0.3128**. The interval does not capture account or time dependence. Exact metrics and segment diagnostics are generated under ignored `results/study_full_history_10pct/`.
 
-The late stress period has 655 positive labels among 1,108 rows (59.1%), versus 0.1197% in the primary test. Its ranking metrics cannot be compared directly with the primary test. No probability calibration or operational threshold analysis has been completed.
+The late stress period has 655 positive labels among 1,108 rows (59.1%), versus 0.1197% in the primary test. Its ranking metrics cannot be compared directly with the primary test. A saved-score replay uses a validation-only cutoff to study alert volume, but there is no probability calibration or prospective operational validation.
 
 ## Explanations
 
@@ -33,4 +33,4 @@ The study exports XGBoost feature importance and native Tree SHAP contributions 
 
 ## Reproduction and governance
 
-Use the [README](../README.md) to obtain the source CSV and environment, then run the commands in [STUDY_RESULTS.md](STUDY_RESULTS.md). The raw dataset, account-level predictions, local case notes, and fitted binaries are excluded from Git. The [local dashboard](../app/dashboard.py) can review generated synthetic alerts and save notes under ignored `results/`. Use the [case review template](CASE_REVIEW_TEMPLATE.md) for structured observations; no external report is filed or submitted.
+Use the [README](../README.md) to obtain the source CSV and run the study. The raw dataset, account-level predictions, local case notes, and fitted binaries are excluded from Git. The [local dashboard](../app/dashboard.py) can review generated synthetic alerts and save notes under ignored `results/`; no external report is filed or submitted.

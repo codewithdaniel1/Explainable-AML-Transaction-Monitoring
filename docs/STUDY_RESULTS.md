@@ -6,7 +6,7 @@
 
 Can transaction fields and earlier account activity rank synthetic laundering labels for a fixed investigator review capacity? Seven specifications were evaluated: currency-aware rules plus logistic regression, XGBoost, and a main-effects Explainable Boosting Machine (EBM), each ML model with transaction-only and behavioral feature sets.
 
-The calendar boundaries were fixed before model fitting. Training uses September 1–6; validation uses September 7–8; the primary untouched test is September 9–10. September 11–18 is reported only as a stress period because both volume and label prevalence change abruptly. [Figure 1](figures/ibm_daily_profile.png) shows the shift.
+The calendar boundaries were fixed before model fitting. Training uses September 1–6; validation uses September 7–8; the primary holdout is September 9–10. September 11–18 is reported only as a stress period because both volume and label prevalence change abruptly, as shown below.
 
 ![Daily IBM transaction volume and synthetic label rate](figures/ibm_daily_profile.png)
 
@@ -53,17 +53,9 @@ The diagnostic outputs include the top 100 alerts, the highest-scored missed pos
 
 ## Reproduce locally
 
-After the [README setup and dataset download](../README.md), run from the repository root:
+Follow the README's [data download](../README.md#download-and-profile-the-ibm-data) and [sampled-study commands](../README.md#run-the-sampled-ibm-pilot). The reported run uses fraction `0.10`, seed `42`, complete earlier history, a 300-repeat diagnostic bootstrap, and a 100-alert-per-day replay target.
 
-```bash
-.venv/bin/python -m pip install -e '.[full-history,visualize]'
-.venv/bin/python -m aml_monitoring.study --csv data/raw/HI-Small_Trans.csv --fraction 0.10 --seed 42 --full-history --output results/study_full_history_10pct
-.venv/bin/python -m aml_monitoring.diagnostics --study-dir results/study_full_history_10pct --repeats 300
-.venv/bin/python -m aml_monitoring.replay --study-dir results/study_full_history_10pct --daily-capacity 100
-.venv/bin/python -m aml_monitoring.plots --profile results/ibm/data_profile.json --study-dir results/study_full_history_10pct --output-dir docs/figures
-```
-
-The study writes `study_manifest.json`, `metrics.json`, `predictions.csv`, `explanations.json`, and `report.md`. Diagnostics adds `diagnostics.json`, `diagnostics.md`, alert and missed-positive CSVs, and `case_context.csv`. Replay adds daily monitoring, emitted alert rows, and a summary. Reproducing the exact sample requires the same CSV version and row order; compare its SHA-256 with [the profiled file](data_profile.md). No generated predictions or account-level records are committed. The [model card](MODEL_CARD.md) records intended use and validation limits.
+The study writes a manifest, metrics, predictions, explanations, and a report under ignored `results/study_full_history_10pct/`. Diagnostics adds alert, missed-positive, and case-context files; replay adds daily monitoring and emitted alerts. Reproducing the exact sample requires the same CSV version and row order; compare its SHA-256 with [the profiled file](data_profile.md). No generated predictions or account-level records are committed. The [model card](MODEL_CARD.md) records intended use and validation limits.
 
 ## What remains before a full research claim
 
