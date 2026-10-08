@@ -1,8 +1,8 @@
 # Explainable AML Modeling
 
-A one-notebook ML class project using IBM's **synthetic HI-Small** transaction data. Open [aml_modeling.ipynb](aml_modeling.ipynb) to follow the full workflow: data profile, chronological split, earlier account-behavior features, logistic regression, XGBoost with Tree SHAP, EBM, rule baseline, evaluation, alert replay, and an investigator-style case review.
+A one-notebook ML class project using IBM's **synthetic HI-Small** transaction data. Open [aml_modeling.ipynb](aml_modeling.ipynb) to run the workflow. Read the short [project guide](docs/PROJECT_GUIDE.md) for an explanation of the steps, features, models, results, and limits.
 
-The notebook is the code, report, and results view. It saves tables and charts **inside the notebook**, with no `results/` folder, metrics JSON, predictions CSV, separate Python modules, app, or test suite. The raw dataset remains a local file because it is about 454 MiB and is not included in Git.
+The notebook holds the code, tables, and charts. It saves outputs **inside the notebook**, with no `results/` folder, metrics JSON, predictions CSV, separate Python modules, app, or test suite. The raw dataset remains a local file because it is about 454 MiB and is not included in Git.
 
 ## Run it locally
 
