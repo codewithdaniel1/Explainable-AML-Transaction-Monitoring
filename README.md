@@ -1,69 +1,77 @@
 # Explainable AML Transaction Monitoring
 
-**New to this repository?** Read [Start here: reading the AML project](docs/START_HERE.md) for the file order and a step-by-step walkthrough of the pipeline.
+Research code for ranking **synthetic** transactions for AML review. The planned class study compares fixed rules, logistic regression, XGBoost, and an Explainable Boosting Machine (EBM) on IBM's HI-Small dataset. A model score recommends review; the synthetic laundering label is not a real suspicious activity report or a finding about a person.
 
-See [Project scope and build status](docs/PROJECT_SCOPE.md) for all 14 planned sections and what is actually implemented.
+## What works now
 
-Prefer running each stage yourself? Open the [pipeline walkthrough notebook](notebooks/aml_pipeline_walkthrough.ipynb) in VS Code and select the project's `.venv` Python kernel. It has saved outputs for the full IBM profile and for every stage of the artificial demo.
+- The IBM `HI-Small_Trans.csv` was downloaded and profiled in the original workspace. The [profile report](docs/data_profile.md) records 5,078,345 transactions and a major late-period label shift.
+- The pipeline loads IBM-format CSVs, builds features from earlier transaction history, and makes chronological train/validation/test splits.
+- Fixed rules, logistic regression, XGBoost, and EBM run on a **small artificial demo**. The [walkthrough notebook](notebooks/aml_pipeline_walkthrough.ipynb) has saved outputs for each step and a snapshot of the IBM profile.
+- **No model performance on the full IBM dataset has been reported.** Currency-mixed amount features and the late-period label shift must be addressed first.
 
-If VS Code shows another kernel such as `NowEDA (.venv311)`, click the kernel name at the top right, choose **Select Another Kernel → Python Environments**, and select this project's `.venv/bin/python`. The project's environment already includes XGBoost and EBM.
+For a file-by-file explanation, read [Start here](docs/START_HERE.md). The [scope map](docs/PROJECT_SCOPE.md) tracks all 14 planned sections and their actual status.
 
-A research project comparing a fixed rule baseline, logistic regression, XGBoost, and an Explainable Boosting Machine (EBM) on **synthetic** transaction data. The main study will use IBM's `HI-Small_Trans.csv`. The code already provides a local first pass: ingest, point-in-time behavioral features, chronological evaluation, and alert-capacity metrics.
+## Set up a fresh clone
 
-The model ranks transactions for further review. IBM's synthetic laundering label is neither a real suspicious activity report nor evidence that a real person committed a crime.
-
-## Run the first working slice
-
-Use Python 3.11 or newer:
+These commands use macOS/Linux paths and Python 3.11 or newer:
 
 ```bash
+git clone https://github.com/codewithdaniel1/Explainable-AML-Transaction-Monitoring.git
+cd Explainable-AML-Transaction-Monitoring
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev,notebook]'
 .venv/bin/aml --demo --output results/demo
-.venv/bin/python -m pytest
+.venv/bin/python -m pytest -q
 ```
 
-On macOS, XGBoost may require `brew install libomp`. The `--demo` data is generated locally with an intentionally easy artificial label pattern. Its metrics only prove that the pipeline runs; **do not cite them as AML findings**.
+On macOS, XGBoost may need the OpenMP runtime (`brew install libomp`). The artificial demo has an intentionally easy label pattern; its metrics verify execution and are **not** AML research findings.
 
-The IBM `HI-Small_Trans.csv` file is already downloaded locally in `data/raw/` from the [IBM dataset page on Kaggle](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml). To reproduce its profile, run:
+In VS Code, open [the notebook](notebooks/aml_pipeline_walkthrough.ipynb) and select this repository's `.venv/bin/python` kernel. If it does not appear, register it and reopen the kernel picker:
 
 ```bash
+.venv/bin/python -m ipykernel install --user --name aml-project --display-name 'Python (AML project .venv)'
+```
+
+The notebook's first code cell checks that the selected kernel belongs to this project's `.venv`. Run cells from top to bottom. Its saved IBM tables are a snapshot; a fresh **Run All** needs the generated profile JSON described below to display those tables.
+
+## Download and profile the IBM data
+
+The raw CSV and generated `results/` files are **not in this GitHub repository**. Download only the HI-Small transaction file from [IBM's Kaggle distribution](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml):
+
+```bash
+.venv/bin/python -m pip install kaggle
+mkdir -p data/raw
+.venv/bin/kaggle datasets download ealtman2019/ibm-transactions-for-anti-money-laundering-aml -f HI-Small_Trans.csv -p data/raw --unzip
 .venv/bin/aml --csv data/raw/HI-Small_Trans.csv --profile-only --output results/ibm
 ```
 
-The full-data model command is documented in the walkthrough for use after we resolve the late-period label shift and currency treatment.
+Kaggle may ask you to sign in. The extracted CSV is about 454 MiB; verify its SHA-256 against the value in the [profile report](docs/data_profile.md). Profiling reads and sorts all 5 million rows in memory. `--max-rows` reads only a development prefix and cannot provide valid full-data evaluation results.
 
-The full CSV is large. The current pandas implementation loads it into memory and builds features in one process; a machine with limited RAM may need a chunked or Databricks path. `--max-rows` is available for development, but it takes a prefix of the file and its metrics cannot stand in for the full out-of-time experiment.
+The profile command writes `results/ibm/data_profile.json`. Open it for exact counts, dates, daily activity, currencies, payment formats, missing values, amount quantiles, and split diagnostics. Then rerun the notebook's profile cell to display its IBM tables.
 
-The first full-data profile and its validation findings are in [docs/data_profile.md](docs/data_profile.md). Review its late-period label shift before running or interpreting the model comparison.
+## Current pipeline and outputs
 
-Outputs in the ignored `results/` folder:
+The CLI (`src/aml_monitoring/cli.py`) connects CSV loading, feature engineering, time splitting, models, and evaluation. Without `--profile-only`, it writes the following under the ignored output directory:
 
-- `data_profile.json`: row counts, label prevalence, date range, missing values, payment formats and currencies, amount quantiles, daily activity, and split diagnostics.
-- `metrics.json`: PR-AUC, ROC-AUC, Brier score, Precision@K, Recall@K, and alerts reviewed.
-- `predictions.csv`: validation and test scores with source row, timestamp, and label for later error analysis.
-
-The models train only on the earliest period. The next period is reserved for selection and threshold work, and the latest period is the final holdout. The current run reports validation and test metrics without tuning. Weighted training scores have **not** been calibrated, so Brier scores are diagnostic and model outputs should not yet be interpreted as true laundering probabilities.
-
-## Current research design
-
-| Question | Current implementation |
+| File | Contents |
 | --- | --- |
-| Can models rank labeled transactions for review? | Four baselines, PR-AUC, Precision@K, Recall@K |
-| Can behavior help beyond transaction fields? | Prior outgoing count and amount over 24 hours and 7 days, historical average, new counterparty indicator |
-| Can evaluation avoid future-data leakage? | Features use strictly earlier timestamps; equal-time transactions do not see one another; chronological splits |
-| How do interpretable models compare? | Logistic regression and EBM are trained; detailed explanation exports are next |
+| `data_profile.json` | Dataset and split summaries. |
+| `metrics.json` | Average precision (stored as `pr_auc`), ROC-AUC, Brier score, Precision@K, and Recall@K for validation and test. |
+| `predictions.csv` | Validation and test scores, labels, timestamps, model names, and row positions. |
 
-`amount_paid` is measured in the sending currency. A rolling sum or average across mixed payment currencies is not financially comparable. The current behavioral amount features are exploratory; currency-specific histories or currency conversion will be added before drawing substantive conclusions from them. The fixed rule threshold of 10,000 is likewise illustrative and currency dependent.
+The models fit on the earliest period only. The current code reports validation and test metrics without tuning or probability calibration. Weighted model scores should not be read as real-world laundering probabilities. The full-data modeling path is still a research work item; the current pandas feature builder may require substantial RAM on 5 million rows.
 
-## Build sequence
+## Next research work
 
-1. **Core class study:** inspect the full IBM data; add currency-consistent history, transaction-only versus behavioral feature comparisons, validation-only model selection, SHAP for XGBoost, EBM term explanations, error analysis, and a concise research report.
-2. **Engineering:** add dbt transformations and a Databricks path, MLflow tracking, reproducible runs, and monitoring/backtests where the observed time range supports them.
-3. **Extensions:** graph features and possible GNN/MLP benchmarks, replayed transaction scoring, an investigator dashboard, and synthetic investigation notes. These remain separate from the primary three-model comparison.
+1. Investigate the IBM dataset's sharp volume and label-rate change after September 10, then document the final out-of-time holdout design.
+2. Make historical amount features and rules currency-consistent.
+3. Compare transaction-only features with behavioral features; tune on validation data, then evaluate the untouched holdout.
+4. Add SHAP, EBM explanations, error analysis, and a class research report.
 
-No real transaction data, credentials, or model artifacts should be committed. `data/raw/`, `results/`, `models/`, and `.env` are ignored.
+Databricks, dbt, MLflow, deep learning, graph analysis, streaming, and an investigation dashboard remain separate planned sections in the [scope map](docs/PROJECT_SCOPE.md).
 
-## Source
+## Data source and repository hygiene
 
-IBM describes the data as generated by a simulated economy, with a laundering tag for model research. See [IBM's AML-Data repository](https://github.com/IBM/AML-Data) and its linked [Kaggle distribution](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml). IBM notes that the data has a separate CDLA-Sharing-1.0 license; check its terms before redistribution.
+IBM describes this dataset as transactions generated by a simulated economy with laundering labels for model research. See [IBM's AML-Data repository](https://github.com/IBM/AML-Data) and its linked [Kaggle dataset](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml). IBM states that the data has a separate CDLA-Sharing-1.0 license. The raw CSV is not redistributed here.
+
+`.gitignore` excludes `data/raw/`, `results/`, `models/`, `.venv/`, and `.env` so large data, generated outputs, and local credentials stay out of Git.

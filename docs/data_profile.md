@@ -1,6 +1,8 @@
 # IBM HI-Small transaction data profile
 
-Profile run: 2026-10-07. Source: [IBM's Kaggle distribution](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), file `HI-Small_Trans.csv`. The raw CSV is stored locally at `data/raw/HI-Small_Trans.csv` and ignored by Git. SHA-256: `b19d39f515523373f991b689c07e11e7b0b95c17a2c27a87d91584ae16c5b040`.
+Profile run: 2026-10-07. Source: [IBM's Kaggle distribution](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), file `HI-Small_Trans.csv`. This report records results from the original workspace. The raw CSV was downloaded to `data/raw/HI-Small_Trans.csv` there and is **not included in Git**. SHA-256 of the profiled CSV: `b19d39f515523373f991b689c07e11e7b0b95c17a2c27a87d91584ae16c5b040`.
+
+For a fresh clone, follow the [download and setup instructions](../README.md#download-and-profile-the-ibm-data) before running the profile command below.
 
 Run:
 
@@ -8,7 +10,7 @@ Run:
 .venv/bin/aml --csv data/raw/HI-Small_Trans.csv --profile-only --output results/ibm
 ```
 
-The full machine-readable output is `results/ibm/data_profile.json`.
+The command generates `results/ibm/data_profile.json` locally. That JSON is ignored by Git; the tables below preserve the main results for readers of the public repository.
 
 ## Dataset summary
 
@@ -34,7 +36,7 @@ The amount statistics pool different currencies, including Bitcoin, so they are 
 | Validation | 1,015,565 | 20.00% | 1,081 | 0.1064% | Sep 6, 13:37 to Sep 8, 16:12 |
 | Test | 1,015,564 | 20.00% | 1,797 | 0.1769% | Sep 8, 16:13 to Sep 18 |
 
-Rows sharing a timestamp remain in the same period. All periods contain positive labels. The test label rate is more than twice the train rate, so prevalence-sensitive metrics and calibration require careful interpretation.
+The split targets 60/20/20 by transaction count while keeping rows with the same timestamp together. All periods contain positive labels. The test label rate is more than twice the train rate, so prevalence-sensitive metrics and calibration require careful interpretation. These are **profile counts**, not model evaluation results.
 
 ## Temporal anomaly to investigate
 

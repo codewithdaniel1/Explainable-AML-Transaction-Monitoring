@@ -1,8 +1,8 @@
 # Start here: reading the AML project
 
-This guide follows one transaction from the raw CSV to a model evaluation. You can read it alongside the code in your IDE. The whole project does not need to make sense on the first pass; start with the purpose of each file and then read the functions in the order below.
+This guide follows one transaction from input to model evaluation. You can read it alongside the code in your IDE. The runnable model example uses **artificial demo data**; the full IBM dataset has been profiled but has not been used for a reported model comparison.
 
-To run the same steps as notebook cells with visible outputs, open [the pipeline walkthrough notebook](../notebooks/aml_pipeline_walkthrough.ipynb) and select the project's `.venv` Python kernel.
+To run the steps as notebook cells with visible outputs, follow the [README setup instructions](../README.md), open [the pipeline walkthrough notebook](../notebooks/aml_pipeline_walkthrough.ipynb), and select this repository's `.venv/bin/python` kernel. The notebook contains a saved IBM profile snapshot. A fresh clone needs the separate download and profile commands from the README to regenerate those tables.
 
 The [project scope map](PROJECT_SCOPE.md) lists all 14 sections we discussed and marks which parts are working, partial, or planned.
 
@@ -14,12 +14,13 @@ IBM CSV or artificial demo
 data.py             load, check, sort transactions
         ↓
 evaluation.py       choose train, validation, and test periods
-        ↓
+        ├─────────── profile-only: save data_profile.json and stop
+        ↓ full run
 features.py         calculate what was known at each transaction time
         ↓
-models.py           fit rules / logistic regression / XGBoost / EBM
+models.py           score fixed rules; fit logistic regression / XGBoost / EBM
         ↓
-evaluation.py       calculate PR-AUC and alert-capacity metrics
+evaluation.py       calculate average precision and alert-capacity metrics
         ↓
 results/            save the profile, metrics, and predictions
 ```
@@ -58,13 +59,13 @@ For the real IBM file, see the exact dates and label counts in [data_profile.md]
 
 `build_features()` turns raw fields into model inputs. Some describe the current transaction, such as hour and payment format. Others describe the sender's **earlier** activity, such as prior outgoing count over 24 hours or prior average amount over 7 days.
 
-Example: if an account sends two transactions at 10:00 and another at 11:00, the two 10:00 transactions see zero earlier transactions at that time. The 11:00 transaction sees both. This prevents same-time CSV row order from creating artificial history.
+Example: if an account has no prior activity, sends two transactions at 10:00, and sends another at 11:00, the two 10:00 transactions see zero earlier transactions. The 11:00 transaction sees both. This prevents same-time CSV row order from creating artificial history.
 
 The current amount-history features mix source currencies. Treat them as exploratory until we group histories by currency or convert amounts consistently.
 
 ### 4. Fit models on training rows
 
-`fit_model()` trains logistic regression, XGBoost, or EBM. Each gets the same feature columns. Logistic regression and XGBoost encode categorical values; EBM reads the named columns directly. The class weights reflect how rare laundering labels are in the training period.
+`fit_model()` trains logistic regression, XGBoost, or EBM. Each gets the same feature columns. Logistic regression and XGBoost encode categorical values; EBM reads the named columns directly. The initial EBM uses main effects without learned interactions. Class weighting reflects how rare laundering labels are in the training period.
 
 `rule_scores()` supplies a simple fixed comparison using amount, 24-hour transaction count, and amount relative to prior history. Its thresholds are illustrative and need currency-specific revision.
 
@@ -74,7 +75,7 @@ The fitted models return scores between 0 and 1 for validation and test transact
 
 `score_predictions()` calculates:
 
-- **PR-AUC:** ranking quality for the rare positive class.
+- **Average precision:** a summary of the precision–recall curve, stored under the current JSON key `pr_auc`.
 - **ROC-AUC:** ranking quality across positive and negative classes.
 - **Precision@K:** positive labels among the top `K` scored alerts.
 - **Recall@K:** share of all positive labels found within those top `K` alerts.
@@ -84,7 +85,7 @@ For example, if the top 100 alerts contain 20 labeled transactions out of 50 tot
 
 ### 6. Inspect saved outputs
 
-The command writes to the ignored `results/` folder:
+The command writes to the ignored `results/` folder. These generated files are not in the public GitHub repository:
 
 | File | What it answers |
 | --- | --- |
@@ -92,14 +93,14 @@ The command writes to the ignored `results/` folder:
 | `metrics.json` | How did each selected model score on validation and test? |
 | `predictions.csv` | Which transaction rows received which model scores? |
 
-So far, we have run the **full IBM data profile**. The artificial demo has run all four baselines as a code check. We have not reported model performance on the full IBM file.
+So far, we have run the **full IBM data profile** in the original workspace. The artificial demo has run all four baselines as a code check. We have not reported model performance on the full IBM file.
 
 ## Commands to try
 
-From the project root:
+From the project root after following the [README setup](../README.md):
 
 ```bash
-# Reproduce the profile already run on the full IBM CSV.
+# Reproduce the IBM profile after downloading the CSV.
 .venv/bin/aml --csv data/raw/HI-Small_Trans.csv --profile-only --output results/ibm
 
 # Run the small artificial demo and inspect its output files.
@@ -109,13 +110,7 @@ From the project root:
 .venv/bin/python -m pytest -q
 ```
 
-When we settle the holdout design and currency treatment, the full-data model command is:
-
-```bash
-.venv/bin/aml --csv data/raw/HI-Small_Trans.csv --alerts 1000 --output results/ibm
-```
-
-That run is more memory-intensive than profiling because it constructs behavioral history for all 5 million rows.
+The full-data model run is pending a defensible holdout design and currency-consistent features. Its present pandas implementation may require substantial RAM for 5 million rows.
 
 ## What comes next
 
@@ -125,4 +120,4 @@ That run is more memory-intensive than profiling because it constructs behaviora
 4. Tune models using validation data, then evaluate the untouched holdout.
 5. Add SHAP and EBM explanations and write the class research report.
 
-Databricks, dbt, MLflow, graph methods, and the investigator dashboard are later sections of the larger project plan in the README.
+Databricks, dbt, MLflow, graph methods, and the investigator dashboard are later sections of the [complete project scope](PROJECT_SCOPE.md).
