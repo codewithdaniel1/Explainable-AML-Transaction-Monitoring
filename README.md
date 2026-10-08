@@ -2,7 +2,7 @@
 
 A simple, one-notebook ML class project using IBM's **synthetic HI-Small** transactions. Open [aml_modeling.ipynb](aml_modeling.ipynb) for the code, saved results, and charts. Read the [project guide](docs/PROJECT_GUIDE.md) for the reasoning behind each step and model.
 
-The notebook compares **logistic regression, XGBoost, and Explainable Boosting Machine (EBM)**. It samples 25% of transactions before September 11, makes a chronological training/validation/test split, fits the models, compares ranking metrics, and displays basic explanations. It writes no metrics JSON, predictions CSV, or `results/` folder.
+The notebook compares **logistic regression, XGBoost, and Explainable Boosting Machine (EBM)**. It samples 50% of transactions before September 11, adds simple earlier sender, receiver, and sender–receiver activity counts, fits the models on earlier dates, and displays ranking metrics at several alert budgets. It writes no metrics JSON, predictions CSV, or `results/` folder.
 
 ## Set up and run
 
@@ -30,12 +30,12 @@ Kaggle may require sign-in. The raw CSV is about 454 MiB and is excluded from Gi
 
 | Sections | What you will see |
 | --- | --- |
-| **1–3** | Imports, a 25% sample, and September 1–6 training / September 7–8 validation / September 9–10 test periods. |
-| **4** | A few current-transaction features and an earlier-sender count calculated **within the sample**. |
-| **5–6** | The three fitted models, average precision, ROC-AUC, Precision@100, Recall@100, and the highest-ranked test rows. |
+| **1–3** | Imports, a 50% sample, current-transaction fields, and earlier sender, receiver, and pair counts calculated **within the sample**. |
+| **4** | September 1–6 training, September 7–8 validation, and September 9–10 reporting periods. |
+| **5–6** | The three fitted models, average precision, ROC-AUC, and precision and recall for 100, 500, and 1,000 reviewed alerts. |
 | **7–8** | Logistic coefficients, one XGBoost Tree SHAP example, EBM term importance, and limits of the experiment. |
 
-The sample-history count is **incomplete** because roughly 75% of eligible transactions are not loaded. The notebook excludes the unusual September 11–18 period, whose transaction volume and label rate shift sharply. Model scores are not calibrated laundering probabilities, and synthetic labels are not real AML decisions. See the [guide](docs/PROJECT_GUIDE.md) for the time-split reasoning, current results, and how bank monitoring differs from this class MVP.
+The history counts are **incomplete** because roughly half of eligible transactions are not loaded. The notebook excludes the unusual September 11–18 period, whose transaction volume and label rate shift sharply. Model scores are not calibrated laundering probabilities, and synthetic labels are not real AML decisions. We examined the reporting period while improving this MVP, so its metrics are exploratory. See the [guide](docs/PROJECT_GUIDE.md) for the feature and metric choices.
 
 ## Databricks and dbt
 
