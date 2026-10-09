@@ -1,6 +1,6 @@
 # Explainable AML Modeling
 
-A one-notebook ML class project using IBM's **synthetic HI-Small** transactions. Open [aml_modeling.ipynb](aml_modeling.ipynb) for all modeling code, saved tables, and charts. The [project guide](docs/PROJECT_GUIDE.md) explains the steps, metrics, and limits.
+A one-notebook ML class project using IBM's **synthetic HI-Small** transactions. Open [aml_modeling.ipynb](aml_modeling.ipynb) for all modeling code, saved tables, and charts. The [class report](docs/CLASS_REPORT.md) is a short, submission-ready summary; the [project guide](docs/PROJECT_GUIDE.md) explains the steps, metrics, and limits.
 
 The notebook uses **every transaction in the 5,078,345-row CSV**. It compares logistic regression, XGBoost, and Explainable Boosting Machine (EBM). Four account-history features use only transactions before each row. Three expanding time folds compare model ranking; September 7–8 sets alert thresholds; all September 9–18 rows form the later test. The notebook reports September 9–10 and the unusually labeled September 11–18 tail separately. Each model has its own metric chart and explanation, including built-in Tree SHAP for XGBoost. The project writes no metrics JSON, predictions CSV, or `results/` folder.
 
@@ -35,7 +35,7 @@ Kaggle may require sign-in. The raw CSV is about 454 MiB and is excluded from Gi
 | **5–6** | Define three explainable models and compare them using expanding time folds inside training. |
 | **7–8** | Fit final models, choose alert thresholds on validation, and show metrics for the full test and its two distinct date ranges. |
 | **9** | A separate metric chart and global and local explanation for each model. |
-| **10** | Limits of the synthetic experiment. |
+| **10** | Class-ready conclusion: model choice, results, coverage gap, and limits. |
 
 All 11 raw CSV fields are read. Bank and account IDs make relationship features and same-bank/account flags, then are dropped as raw identifiers. The notebook's scores rank transactions for review; they are not calibrated probabilities or proof of laundering. The later test was consulted during development, so its results are exploratory. See the [guide](docs/PROJECT_GUIDE.md) for the field audit, label balance, and interpretation.
 

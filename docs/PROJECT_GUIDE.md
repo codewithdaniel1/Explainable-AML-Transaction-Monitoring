@@ -1,6 +1,6 @@
 # Guide to the AML modeling notebook
 
-The [notebook](../aml_modeling.ipynb) contains all code, tables, and charts for this class MVP. The [README](../README.md) covers setup and download. The task is to **rank synthetic laundering-labeled transactions for review**. A high score is not proof of laundering.
+The [notebook](../aml_modeling.ipynb) contains all code, tables, and charts for this class MVP. The short [class report](CLASS_REPORT.md) summarizes the findings for submission, and the [README](../README.md) covers setup and download. The task is to **rank synthetic laundering-labeled transactions for review**. A high score is not proof of laundering.
 
 ## Read the notebook in order
 
@@ -11,7 +11,7 @@ The [notebook](../aml_modeling.ipynb) contains all code, tables, and charts for 
 | **5–6** | Define three simple models and compare them across three expanding time folds. | Choose a model using earlier ranking results. |
 | **7–8** | Fit on all training rows, set alert thresholds on validation, and report full and date-specific later results. | Show detection, workload, and the unusual final period. |
 | **9** | Show each model's scorecard and global and local explanations, including Tree SHAP for XGBoost. | Explain how each score is calculated. |
-| **10** | Summarize the limits of the synthetic experiment. | Keep class-project scores separate from bank decisions. |
+| **10** | Present the selected model, comparative results, coverage gap, and limits. | Give a clear class conclusion without treating synthetic scores as bank decisions. |
 
 The notebook keeps results in one place. It creates no metrics JSON, predictions CSV, or `results/` directory.
 
@@ -80,15 +80,17 @@ Logistic regression and EBM use their best September 7–8 **F1** thresholds. XG
 
 The **ordinary September 9–10** results are the most comparable with validation because their positive-label rates are close:
 
-| Model | AP | Precision | Recall | F1 | FPR | Alerts | Positive labels caught |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Logistic regression | 0.2827 | 37.2% | 32.9% | 0.349 | 0.062% | 847 | 315 of 956 |
-| **XGBoost** | **0.4625** | 70.6% | **39.6%** | **0.508** | 0.018% | 537 | **379 of 956** |
-| EBM | 0.4167 | **79.0%** | 31.2% | 0.447 | **0.009%** | **377** | 298 of 956 |
+| Model | AP | Precision | Recall | F1 | FPR | Alerts | Positive labels caught | Missed positives (of 956) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic regression | 0.2827 | 37.2% | 32.9% | 0.349 | 0.062% | 847 | 315 of 956 | 641 |
+| **XGBoost** | **0.4625** | 70.6% | **39.6%** | **0.508** | 0.018% | 537 | **379 of 956** | **577** |
+| EBM | 0.4167 | **79.0%** | 31.2% | 0.447 | **0.009%** | **377** | 298 of 956 | 658 |
 
 On the 1,108-row September 11–18 tail, XGBoost catches **389 of 655** positive labels in **425 alerts**. Its tail precision is **91.5%** and recall is **59.4%**. That high precision partly reflects a population with **59.1% positive labels**; it should not be interpreted as a comparable improvement over the ordinary days. Across the full September 9–18 test, the aggregate XGBoost numbers are **79.8% precision, 47.7% recall, and 0.597 F1** in **962 alerts**, combining both populations.
 
-The selected XGBoost model catches **none of the 122 positive non-ACH payments** in the full later test. Its ACH recall is **768 of 1,489**, while non-ACH recall is zero. The format breakdown in section 8 makes this important coverage gap visible despite the overall score.
+The selected XGBoost model catches **none of the 122 positive non-ACH payments** in the full later test. They are all on September 9–10 and account for **122 of 577** ordinary-period misses; the other **455** missed positives are ACH. Its full-test ACH recall is **768 of 1,489**, while non-ACH recall is zero. The gap also appears on validation (**0 of 146** non-ACH positives caught). Training has **2,104 positive ACH rows out of 363,584**, compared with **426 positive non-ACH rows out of 2,885,337**. The chosen threshold is **0.3704**, but the highest score among later positive non-ACH payments is only **0.0300**.
+
+Section 8.1 of the notebook checks a lower **0.0146** non-ACH cutoff derived from validation. It catches **15 positive labels with 12,021 false alerts** on validation, and **12 positive labels with 9,907 false alerts** on test. This is an *exploratory diagnostic* after inspecting the coverage gap, not a replacement decision rule. It shows why simply lowering the cutoff would impose a very large review workload for little non-ACH detection. Better features or a separate format-aware investigation would need a new, clean evaluation before making a stronger claim.
 
 The project's **illustrative class goal** is at least **30% precision and recall**, **0.30 F1**, and **FPR below 0.1%** on the ordinary September 9–10 test days. These are **not industry or regulatory minimums**. The [FFIEC BSA/AML Examination Manual](https://bsaaml.ffiec.gov/manual/AssessingComplianceWithBSARegulatoryRequirements/04) describes monitoring tailored to a bank's risks and investigation process. The [Wolfsberg Group monitoring statement](https://wolfsberg-group.org/resources/195/202) considers precision and recall alongside risk coverage and SAR-quality feedback. The [2026 interagency model-risk guidance](https://www.federalreserve.gov/supervisionreg/srletters/SR2602a1.pdf) addresses testing and limitations in a risk-based way, without setting universal AML classifier percentages.
 
