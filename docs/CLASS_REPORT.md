@@ -8,6 +8,8 @@ Can understandable machine-learning models rank synthetic transactions for AML r
 
 The project uses **all 9,504,852 transactions** in [SAML-D](https://github.com/BOztasUK/Anti_Money_Laundering_Transaction_Data_SAML-D), a synthetic transaction-monitoring dataset. There are **9,873 positive labels (0.1039%)**. Transactions span October 7, 2022 to August 23, 2023 and include amount, payment type, currencies, bank locations, and sender and receiver account IDs. Labels appear across the timeline but vary by payment method. For example, the positive rate is **0.0577% for ACH** and **0.6239% for Cash Deposit**. These are properties of the synthetic generator, not measured bank risk.
 
+The notebook's quick EDA charts the imbalance, payment-type rates, and monthly rates. Within **UK-pound payments**, the median positive-label amount is about **5,091**, versus **6,047** for negative-label payments. This descriptive comparison shows why a simple high-amount rule would be incomplete; the final models use amount alongside payment and account-history information. October and August are partial months in the monthly chart.
+
 The notebook derives hour, weekday, current log amount, currency and location match flags, and simple features from strictly earlier sender, receiver, and sender–receiver pair activity. A sender's earlier average amount uses transactions in the **same payment currency**. Raw account IDs link history but are not model inputs. The `Laundering_type` field is **excluded from every model** because it identifies a generated scenario and could reveal the answer; it is used only for a post-score coverage audit.
 
 The split keeps complete calendar days in time order:
@@ -30,7 +32,7 @@ Every model is evaluated on the **same 1,412,824 later transactions and 1,683 po
 | **XGBoost** | **0.8959** | **93.8%** | **84.1%** | **0.8872** | 0.0066% | 1,509 | **1,416** | 93 | **267** |
 | EBM | 0.5100 | 89.3% | 41.2% | 0.5642 | **0.0059%** | **777** | 694 | **83** | 989 |
 
-**XGBoost** is the selected model because it ranked best across the earlier time folds, and it also has the strongest test AP, precision, recall, and F1 at its validation-selected threshold. Its 1,509 alerts comprise **1,416 positive-label transactions and 93 negative-label transactions**. EBM generates fewer alerts and slightly fewer false alerts, but catches fewer than half of test positives. Logistic regression is the easiest to describe as a weighted sum, yet its alert workload is larger and its detection is much lower on this dataset. The notebook includes a separate scorecard and explanation charts for each model, including global and local Tree SHAP for XGBoost.
+**XGBoost** is the selected model because it ranked best across the earlier time folds, and it also has the strongest test AP, precision, recall, and F1 at its validation-selected threshold. Its 1,509 alerts comprise **1,416 positive-label transactions and 93 negative-label transactions**. EBM generates fewer alerts and slightly fewer false alerts, but catches fewer than half of test positives. Logistic regression is the easiest to describe as a weighted sum, yet its alert workload is larger and its detection is much lower on this dataset. The notebook includes a separate scorecard and explanation charts for each model: global and local Tree SHAP for XGBoost, plus InterpretML's built-in global, feature-effect, and local views for EBM.
 
 ### How to read the metrics
 

@@ -22,11 +22,13 @@ Can three understandable models rank **synthetic transactions labeled as launder
 
 These rates describe this generator, not real bank payment risk. They show why one overall metric can hide poor coverage for a particular payment method.
 
+The quick EDA also plots monthly positive-label rates. The first and last months are partial months, so their rates should be read with that limitation. Its same-currency amount table uses **UK-pound payments only**: the median amount is about **5,091 for positive labels** and **6,047 for negative labels**. Pooling nominal amounts across currencies would make that comparison harder to interpret.
+
 ## Read the notebook in order
 
 | Section | What happens | Why |
 | --- | --- | --- |
-| 1–2 | Import packages, read all rows, show label balance by payment method and month. | Understand the data before fitting. |
+| 1–2 | Import packages, read all rows, chart label balance, payment-method rates, and monthly rates; compare median amounts within one currency. | Understand the data before fitting without mixing currency units. |
 | 3 | Create current-transaction and strictly earlier account-history features. | Give models interpretable behavior clues without future information. |
 | 4 | Split dates into train, validation, and test; define model inputs. | Keep threshold selection separate from the later evaluation. |
 | 5–6 | Define the three models and run expanding time folds inside training. | Compare ranking on later periods without shuffling future rows into the past. |
@@ -75,7 +77,7 @@ The logistic pipeline learns one-hot categories and numeric scaling from each fi
 | --- | --- | --- |
 | Logistic regression | A weighted sum of standardized numeric values and one-hot categories. | Global coefficient chart and local contribution chart. |
 | XGBoost | 100 shallow decision trees, maximum depth 3. | Global and local **Tree SHAP** charts in raw score units. |
-| EBM | Additive learned effects with interactions turned off. | Global term-importance and local term-contribution charts. |
+| EBM | Additive learned effects with interactions turned off. | InterpretML's built-in global importance view, learned feature-effect graph, and local explanation. |
 
 Positive training labels receive 10 times the fitting weight of negative labels. This is a simple class-imbalance choice, not an estimate of bank investigation cost. The threshold is fitted separately on validation data.
 
