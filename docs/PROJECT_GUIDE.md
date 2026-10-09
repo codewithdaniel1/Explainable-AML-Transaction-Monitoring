@@ -1,97 +1,115 @@
-# Guide to the AML modeling notebook
+# Guide to the SAML-D modeling notebook
 
-The [notebook](../aml_modeling.ipynb) contains all code, tables, and charts for this class MVP. The short [class report](CLASS_REPORT.md) summarizes the findings for submission, and the [README](../README.md) covers setup and download. The task is to **rank synthetic laundering-labeled transactions for review**. A high score is not proof of laundering.
+The [notebook](../aml_modeling.ipynb) contains the code, data profile, model results, and charts for this class MVP. The [README](../README.md) covers setup and the download; the [class report](CLASS_REPORT.md) summarizes the findings.
+
+## What is the modeling question?
+
+Can three understandable models rank **synthetic transactions labeled as laundering** for review, and which labeled patterns do they miss? This is transaction-level classification. A model alert means its score crossed a chosen threshold; it is not a legal finding, an investigator decision, or a Suspicious Activity Report.
+
+[SAML-D](https://github.com/BOztasUK/Anti_Money_Laundering_Transaction_Data_SAML-D) was designed as a synthetic transaction-monitoring dataset with several payment methods and suspicious-activity typologies. The local CSV has **9,504,852 transactions** from October 7, 2022 through August 23, 2023. **9,873 rows (0.1039%)** have `Is_laundering = 1`; the other 9,494,979 have label 0. No source fields are missing. The data remain highly imbalanced. Predicting every row as negative would appear more than 99% accurate but would detect none of the labeled activity.
+
+### Payment-method balance before modeling
+
+| Payment type | Rows | Positive labels | Positive rate |
+| --- | ---: | ---: | ---: |
+| ACH | 2,008,807 | 1,159 | 0.0577% |
+| Cash Deposit | 225,206 | 1,405 | 0.6239% |
+| Cash Withdrawal | 300,477 | 1,334 | 0.4440% |
+| Cheque | 2,011,419 | 1,087 | 0.0540% |
+| Credit card | 2,012,909 | 1,136 | 0.0564% |
+| Cross-border | 933,931 | 2,628 | 0.2814% |
+| Debit card | 2,012,103 | 1,124 | 0.0559% |
+
+These rates describe this generator, not real bank payment risk. They show why one overall metric can hide poor coverage for a particular payment method.
 
 ## Read the notebook in order
 
-| Sections | What happens | Why |
+| Section | What happens | Why |
 | --- | --- | --- |
-| **1–3** | Read every CSV row and calculate four features from strictly earlier account activity. | Use the complete data while keeping future activity out of each row's features. |
-| **4** | Split all rows by date and prepare model inputs. | Separate fitting, threshold selection, and later reporting. |
-| **5–6** | Define three simple models and compare them across three expanding time folds. | Choose a model using earlier ranking results. |
-| **7–8** | Fit on all training rows, set alert thresholds on validation, and report full and date-specific later results. | Show detection, workload, and the unusual final period. |
-| **9** | Show each model's scorecard and global and local explanations, including Tree SHAP for XGBoost. | Explain how each score is calculated. |
-| **10** | Present the selected model, comparative results, coverage gap, and limits. | Give a clear class conclusion without treating synthetic scores as bank decisions. |
+| 1–2 | Import packages, read all rows, show label balance by payment method and month. | Understand the data before fitting. |
+| 3 | Create current-transaction and strictly earlier account-history features. | Give models interpretable behavior clues without future information. |
+| 4 | Split dates into train, validation, and test; define model inputs. | Keep threshold selection separate from the later evaluation. |
+| 5–6 | Define the three models and run expanding time folds inside training. | Compare ranking on later periods without shuffling future rows into the past. |
+| 7–8 | Fit final models on training data, set F1 thresholds on validation data, and evaluate later test rows. | Report detection and review workload at a defined operating point. |
+| 8.1 | Inspect missed positive labels by payment type and typology. | Reveal coverage gaps concealed by aggregate metrics. |
+| 9–10 | Show each model's scorecard and explanation, then a conclusion. | Explain both performance and how scores are formed. |
 
-The notebook keeps results in one place. It creates no metrics JSON, predictions CSV, or `results/` directory.
+The notebook does not create a `results/` folder or separate metric and prediction files.
 
-## Data and time-ordered validation
+## Time split and cross-validation
 
-The local `data/raw/HI-Small_Trans.csv` has **5,078,345 rows, and all are modeled**. Every transaction contributes to the history of later transactions. Fixed date boundaries give this split:
+The split uses complete calendar days in order. About 70% of the **days** are for training, 15% for validation, and 15% for testing. Daily transaction totals differ slightly, so row shares are approximate:
 
-| Period | Dates in 2022 | Rows | Share of all rows | Positive labels | Positive rate |
+| Period | Dates | Rows | Row share | Positive labels | Positive rate |
 | --- | --- | ---: | ---: | ---: | ---: |
-| Training | September 1–6 | 3,248,921 | 63.98% | 2,530 | 0.0779% |
-| Validation | September 7–8 | 965,524 | 19.01% | 1,036 | 0.1073% |
-| Later test | September 9–18 | 863,900 | 17.01% | 1,611 | 0.1865% |
+| Train | Oct 7, 2022–May 18, 2023 | 6,661,223 | 70.08% | 6,774 | 0.1017% |
+| Validation | May 19–Jul 5, 2023 | 1,430,805 | 15.05% | 1,416 | 0.0990% |
+| Test | Jul 6–Aug 23, 2023 | 1,412,824 | 14.86% | 1,683 | 0.1191% |
 
-The later test contains two very different parts:
+Within training, three **expanding time folds** fit on earlier days and check the next block of days. The model family is selected by the mean **average precision** (AP) across the folds. All three final models are then fitted on the full training period. Validation labels determine each model's alert threshold, selected for highest validation F1. The final test period supplies only evaluation and coverage analysis.
 
-| Test dates | Rows | Positive labels | Positive rate |
-| --- | ---: | ---: | ---: |
-| September 9–10 | 862,792 | 956 | 0.1108% |
-| September 11–18 | 1,108 | 655 | 59.1155% |
+Stratified K-fold would deliberately distribute rare positives across folds but would mix dates. Time order is more relevant to a monitoring workflow, where future transactions are unavailable when earlier alerts are scored. The number of positive labels in each fold is displayed in the notebook so a thin fold is visible.
 
-The small September 11–18 tail has an enormous label-rate shift. It is included because the project now uses every row, but its precision and average precision cannot be compared naively with September 9–10: those metrics depend on the positive-label rate. The all-test aggregate combines these different populations, so read both date-specific rows in the notebook. Monitoring uses past activity to review later activity; this is a time-based **evaluation**, not a forecasting model. The [IBM benchmark paper](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf) also uses temporal evaluation and features from past transactions.
+## Inputs and leakage control
 
-### Label balance
+Every raw CSV field has a defined role:
 
-Across the full CSV, **5,177 rows (0.1019%)** have a positive synthetic label and **5,073,168 (99.8981%)** have a negative label. Predicting everything negative would look accurate but catch nothing. This is why the notebook reports precision, recall, F1, false positive rate, average precision, and alert counts instead of relying on accuracy. The ordinary September 9–10 positive rate, about **0.00111**, is the random-ranking baseline for average precision in that period; the later tail's baseline is about **0.591**.
+| Source fields | Use |
+| --- | --- |
+| `Date`, `Time` | Order activity, set the split, derive hour and weekday. |
+| `Sender_account`, `Receiver_account` | Connect transactions to earlier sender, receiver, and pair activity; raw IDs are not predictors. |
+| `Amount` | Current log amount, earlier average sender amount in the same payment currency, and gap from that average. |
+| `Payment_currency`, `Received_currency` | Categorical inputs and same-currency flag. |
+| `Sender_bank_location`, `Receiver_bank_location` | Categorical inputs and same-location flag. |
+| `Payment_type` | Categorical input and later coverage audit. |
+| `Is_laundering` | Binary target for fitting and evaluation only. |
+| `Laundering_type` | **Post-score coverage audit only.** It identifies a generated scenario and would reveal information about the target if used as an input. |
 
-### Three expanding folds
+The earlier-history features are sender transaction count, receiver transaction count, sender–receiver pair count, sender transaction count in the **same currency**, and the sender's earlier average amount in that currency. Transactions with the same timestamp do not count one another as earlier. These features use prior transaction facts, never prior labels. The notebook also uses current payment amount, hour, weekday, same-account flag, same-bank-location flag, same-currency flag, and the amount gap from the sender's prior average.
 
-Within September 1–6 training, each model is refitted on earlier days and checked on the next day:
+The logistic pipeline learns one-hot categories and numeric scaling from each fitting period. XGBoost and EBM use the named categorical columns directly. All three model families receive the same underlying transaction information.
 
-| Fold | Fit dates | Check date | Positive labels on check day |
-| --- | --- | --- | ---: |
-| 1 | September 1–3 | September 4 | 407 |
-| 2 | September 1–4 | September 5 | 471 |
-| 3 | September 1–5 | September 6 | 531 |
+## Models, metrics, and explanations
 
-Category encoding and logistic scaling use each fold's fitting rows. History features for any transaction use only activity **strictly before its timestamp**, including earlier rows outside a fold's fitting period; they use no labels. This simulates information that would have been observed by that time. Stratified K-fold would even out labels but could reverse time order. The notebook chooses the model family by mean **average precision (AP)** across these folds, then chooses thresholds on September 7–8 without refitting. The [2026 interagency model-risk guidance](https://www.federalreserve.gov/supervisionreg/srletters/SR2602a1.pdf) discusses out-of-time testing as an option without mandating a particular cross-validation method.
-
-| Model | Sep 4 AP | Sep 5 AP | Sep 6 AP | Mean AP |
-| --- | ---: | ---: | ---: | ---: |
-| **XGBoost** | 0.4124 | 0.4332 | 0.4886 | **0.4448** |
-| EBM | 0.3868 | 0.3994 | 0.4543 | 0.4135 |
-| Logistic regression | 0.2584 | 0.2798 | 0.2995 | 0.2792 |
-
-## Inputs and simple model explanations
-
-All **11 original CSV fields** are read. Timestamp sets the split and transaction hour. Bank and account identifiers connect sender, receiver, and pair histories and make the same-bank/account flags; raw IDs are **not direct model predictors**. Paid and received amounts become log amounts, currencies and payment format become 0/1 categories, and `Is Laundering` is used only as the training/evaluation label.
-
-Four history inputs come from every earlier transaction: `prior_sender_count`, `prior_receiver_count`, `prior_pair_count`, and `log_prior_sender_mean_amount` (the sender's earlier typical paid amount in the same currency). Rows at the same timestamp do not count one another. These capture basic account and relationship behavior, not the richer graph and cycle patterns in the [IBM study](https://papers.nips.cc/paper/2023/file/5f38404edff6f3f642d6fa5892479c42-Paper-Datasets_and_Benchmarks.pdf).
-
-| Model | Simple structure | How section 9 explains it |
+| Model | Shape | Explanation |
 | --- | --- | --- |
-| **Logistic regression** | A weighted sum after standardization. It log-scales history counts and adds three readable behavior clues. | A coefficient chart gives overall direction; another chart breaks down one row's linear score. |
-| **XGBoost** | 120 shallow trees with maximum depth 3. | Built-in **Tree SHAP** shows average absolute effects on 500 later rows and signed effects on one row. |
-| **EBM** | An additive score from one effect per input, with interactions disabled. | Term importance gives the general pattern; term contributions break down one row's score. |
+| Logistic regression | A weighted sum of standardized numeric values and one-hot categories. | Global coefficient chart and local contribution chart. |
+| XGBoost | 100 shallow decision trees, maximum depth 3. | Global and local **Tree SHAP** charts in raw score units. |
+| EBM | Additive learned effects with interactions turned off. | Global term-importance and local term-contribution charts. |
 
-For logistic regression, the three added clues are `seen_sender_before`, `seen_pair_before`, and `amount_vs_sender_usual`. The last is the absolute gap between the current log payment and the sender's earlier typical log payment; it is zero if there is no earlier sender history. These simple transformations help a linear model handle very large count ranges. The three models use the same transactions and labels, with a few simple transformations for the linear model.
+Positive training labels receive 10 times the fitting weight of negative labels. This is a simple class-imbalance choice, not an estimate of bank investigation cost. The threshold is fitted separately on validation data.
 
-XGBoost's `pred_contribs=True` returns Tree SHAP feature contributions plus a bias term. They sum to the **raw model score**, not to a probability; the global chart is an illustrative 500-row sample. [XGBoost documents this output](https://xgboost.readthedocs.io/en/latest/python/python_api.html). EBM's local term scores likewise sum with its intercept to its raw score, as described by [InterpretML](https://interpret.ml/docs/python/api/ExplainableBoostingClassifier.html). Each chart explains the model's calculation; none identifies a customer's intent or the true cause of a synthetic label.
+- **Average precision (AP)** summarizes ranking over many possible thresholds. The positive-label rate is the approximate random-ranking baseline in each period.
+- **Precision** = true positive alerts ÷ all alerts. It tells us the share of alerts that match positive *synthetic labels*.
+- **Recall** = true positive alerts ÷ all positive labels. It tells us how many known positives are found.
+- **F1** = `2 × precision × recall ÷ (precision + recall)`. It balances precision and recall at one threshold.
+- **False positive rate (FPR)** = false positive alerts ÷ all negative labels. A tiny FPR can still mean many false alerts when the negative class is very large.
+- **Alerts** = all scored transactions above the chosen threshold. **Missed positives** are false negatives.
 
-## Performance and interpretation
+All of these are standard classification measures, but no U.S. regulation sets a universal required AML precision, recall, F1, or FPR. A bank also has to consider risk coverage, alert workload, investigator findings, data quality, and changes over time. The [FFIEC BSA/AML Examination Manual](https://bsaaml.ffiec.gov/manual/AssessingComplianceWithBSARegulatoryRequirements/04) describes monitoring tailored to an institution's risks and procedures. These synthetic results do not establish production readiness.
 
-**AP** summarizes ranking across thresholds. At a chosen alert threshold, **precision** is `TP / (TP + FP)`, **recall** is `TP / (TP + FN)`, **F1** balances those two, and **false positive rate (FPR)** is `FP / (FP + TN)`. Alert count matters because investigators review actual cases. [scikit-learn explains precision–recall curves](https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html).
+### Expanding-fold results
 
-Logistic regression and EBM use their best September 7–8 **F1** thresholds. XGBoost uses the threshold with the highest validation **recall** among thresholds with at least **70% validation precision**. This is a classroom choice to find more labels while keeping most alerts useful; it is not a regulatory cutoff. Changing a threshold alters alert precision and recall without changing ranking AP, as [scikit-learn explains](https://scikit-learn.org/stable/modules/classification_threshold.html). The notebook reports the selected XGBoost operating point and its validation-F1 alternative.
+The three check windows begin January 4, February 18, and April 4, 2023. They contain **1,523**, **1,297**, and **1,505** positive labels respectively. AP is measured on the immediately later window in each fold:
 
-The **ordinary September 9–10** results are the most comparable with validation because their positive-label rates are close:
+| Model | Fold 1 AP | Fold 2 AP | Fold 3 AP | Mean AP |
+| --- | ---: | ---: | ---: | ---: |
+| Logistic regression | 0.0724 | 0.0897 | 0.0776 | 0.0799 |
+| **XGBoost** | **0.7737** | **0.8690** | **0.8700** | **0.8376** |
+| EBM | 0.1771 | 0.3823 | 0.4324 | 0.3306 |
 
-| Model | AP | Precision | Recall | F1 | FPR | Alerts | Positive labels caught | Missed positives (of 956) |
+XGBoost is selected by the predeclared mean-fold-AP rule. These are unusually strong synthetic ranking results for XGBoost. They should prompt an audit of how the generator constructs labels and an explicit warning against treating them as realistic bank performance. The target and `Laundering_type` are excluded from all input columns.
+
+## What the SAML-D run found
+
+All three models use the same later test period with **1,683 positive labels**. Thresholds came from validation F1, so each model has a different alert count:
+
+| Model | Test AP | Precision | Recall | F1 | FPR | Alerts | Caught | Missed |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Logistic regression | 0.2827 | 37.2% | 32.9% | 0.349 | 0.062% | 847 | 315 of 956 | 641 |
-| **XGBoost** | **0.4625** | 70.6% | **39.6%** | **0.508** | 0.018% | 537 | **379 of 956** | **577** |
-| EBM | 0.4167 | **79.0%** | 31.2% | 0.447 | **0.009%** | **377** | 298 of 956 | 658 |
+| Logistic regression | 0.1336 | 21.2% | 21.7% | 0.2146 | 0.0965% | 1,728 | 366 | 1,317 |
+| **XGBoost** | **0.8959** | **93.8%** | **84.1%** | **0.8872** | 0.0066% | 1,509 | **1,416** | **267** |
+| EBM | 0.5100 | 89.3% | 41.2% | 0.5642 | **0.0059%** | **777** | 694 | 989 |
 
-On the 1,108-row September 11–18 tail, XGBoost catches **389 of 655** positive labels in **425 alerts**. Its tail precision is **91.5%** and recall is **59.4%**. That high precision partly reflects a population with **59.1% positive labels**; it should not be interpreted as a comparable improvement over the ordinary days. Across the full September 9–18 test, the aggregate XGBoost numbers are **79.8% precision, 47.7% recall, and 0.597 F1** in **962 alerts**, combining both populations.
+For the selected XGBoost model, the **267 missed** positives include **115 Cash Deposits**, **80 Cash Withdrawals**, and **38 Cross-border** transactions. The typology audit identifies **Smurfing** as the largest gap: **115 of 151** positive Smurfing rows are missed. This shows why payment-type and typology coverage should be read with aggregate recall. `Laundering_type` did not enter any model; it is used only to label the final audit table.
 
-The selected XGBoost model catches **none of the 122 positive non-ACH payments** in the full later test. They are all on September 9–10 and account for **122 of 577** ordinary-period misses; the other **455** missed positives are ACH. Its full-test ACH recall is **768 of 1,489**, while non-ACH recall is zero. The gap also appears on validation (**0 of 146** non-ACH positives caught). Training has **2,104 positive ACH rows out of 363,584**, compared with **426 positive non-ACH rows out of 2,885,337**. The chosen threshold is **0.3704**, but the highest score among later positive non-ACH payments is only **0.0300**.
-
-Section 8.1 of the notebook checks a lower **0.0146** non-ACH cutoff derived from validation. It catches **15 positive labels with 12,021 false alerts** on validation, and **12 positive labels with 9,907 false alerts** on test. This is an *exploratory diagnostic* after inspecting the coverage gap, not a replacement decision rule. It shows why simply lowering the cutoff would impose a very large review workload for little non-ACH detection. Better features or a separate format-aware investigation would need a new, clean evaluation before making a stronger claim.
-
-The project's **illustrative class goal** is at least **30% precision and recall**, **0.30 F1**, and **FPR below 0.1%** on the ordinary September 9–10 test days. These are **not industry or regulatory minimums**. The [FFIEC BSA/AML Examination Manual](https://bsaaml.ffiec.gov/manual/AssessingComplianceWithBSARegulatoryRequirements/04) describes monitoring tailored to a bank's risks and investigation process. The [Wolfsberg Group monitoring statement](https://wolfsberg-group.org/resources/195/202) considers precision and recall alongside risk coverage and SAR-quality feedback. The [2026 interagency model-risk guidance](https://www.federalreserve.gov/supervisionreg/srletters/SR2602a1.pdf) addresses testing and limitations in a risk-based way, without setting universal AML classifier percentages.
-
-This CSV has synthetic labels but no investigator decisions or Suspicious Activity Report outcomes. A real bank would also examine missed-risk typologies, customer context, investigative capacity, and monitoring over time. The later test was consulted during development, so these results are **exploratory**, not an untouched final estimate. Scores are **not calibrated laundering probabilities**. The study supports a class comparison of three explainable scoring approaches, not an operational AML conclusion.
+The XGBoost test scores are strikingly high for a rare-label task. SAML-D is generated, and its labels can reflect consistent rules or unusually clean patterns. The result is valid as a comparison of these three models on this CSV and split, but it is not a performance estimate for a live bank. See the [class report](CLASS_REPORT.md) for the per-model interpretation and limits.
