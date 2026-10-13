@@ -2,71 +2,92 @@
 
 ## Research question
 
-Can understandable machine-learning models rank synthetic transactions for AML review while keeping alert volume manageable? This project compares logistic regression, XGBoost, and an Explainable Boosting Machine (EBM). It also asks which labeled laundering patterns the strongest model misses.
+Can three simple detection tracks provide useful signals to understandable AML models? This project compares logistic regression, XGBoost, and an Explainable Boosting Machine (EBM), then asks whether alerts from the rules, anomaly, or network tracks find labeled positives that the selected model misses without creating too much extra review work. The [project guide's architecture diagram](PROJECT_GUIDE.md#architecture-at-a-glance) shows the complete flow.
 
-## Dataset and method
+## Stage 1: Data profile, features, and time split
 
-The project uses **all 9,504,852 transactions** in [SAML-D](https://github.com/BOztasUK/Anti_Money_Laundering_Transaction_Data_SAML-D), a synthetic transaction-monitoring dataset. There are **9,873 positive labels (0.1039%)**. Transactions span October 7, 2022 to August 23, 2023 and include amount, payment type, currencies, bank locations, and sender and receiver account IDs. Labels appear across the timeline but vary by payment method. For example, the positive rate is **0.0577% for ACH** and **0.6239% for Cash Deposit**. These are properties of the synthetic generator, not measured bank risk.
+The [SAML-D dataset](https://github.com/BOztasUK/Anti_Money_Laundering_Transaction_Data_SAML-D) contains **9,504,852 synthetic transactions**, with **9,873 positive labels (0.1039%)**, from October 7, 2022 through August 23, 2023. It includes payment type, amount, currencies, bank locations, account IDs, and a generated laundering typology. The notebook's EDA shows different positive-label rates across payment methods: 0.6239% for Cash Deposit and 0.0577% for ACH. Within UK-pound payments, the median positive-label amount is about 5,091, below the negative-label median of about 6,047. These observations describe the generator, not real bank risk.
 
-The notebook's quick EDA charts the imbalance, payment-type rates, and monthly rates. Within **UK-pound payments**, the median positive-label amount is about **5,091**, versus **6,047** for negative-label payments. This descriptive comparison shows why a simple high-amount rule would be incomplete; the final models use amount alongside payment and account-history information. October and August are partial months in the monthly chart.
+Features include current payment facts and counts or averages from **strictly earlier** account activity. Earlier distinct counterparties provide simple fan-in and fan-out network features. Raw account IDs establish relationships but are not direct classifier inputs. `Laundering_type` is reserved for the final coverage audit and is never used to flag or train a transaction.
 
-The notebook derives hour, weekday, current log amount, currency and location match flags, and simple features from strictly earlier sender, receiver, and sender–receiver pair activity. A sender's earlier average amount uses transactions in the **same payment currency**. Raw account IDs link history but are not model inputs. The `Laundering_type` field is **excluded from every model** because it identifies a generated scenario and could reveal the answer; it is used only for a post-score coverage audit.
+The notebook uses every row and splits complete days chronologically:
 
-The split keeps complete calendar days in time order:
+| Period | Dates | Transactions | Positive labels | Positive rate |
+| --- | --- | ---: | ---: | ---: |
+| Training | Oct 7, 2022–May 18, 2023 | 6,661,223 | 6,774 | 0.1017% |
+| Validation | May 19–Jul 5, 2023 | 1,430,805 | 1,416 | 0.0990% |
+| Testing | Jul 6–Aug 23, 2023 | 1,412,824 | 1,683 | 0.1191% |
 
-| Period | Dates | Rows | Row share | Positive labels | Positive rate |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Training | Oct 7, 2022–May 18, 2023 | 6,661,223 | 70.08% | 6,774 | 0.1017% |
-| Validation | May 19–Jul 5, 2023 | 1,430,805 | 15.05% | 1,416 | 0.0990% |
-| Testing | Jul 6–Aug 23, 2023 | 1,412,824 | 14.86% | 1,683 | 0.1191% |
+## Stage 2: Three parallel detection tracks
 
-Three expanding time folds within training select the model family by mean **average precision (AP)**. XGBoost has the highest mean fold AP (**0.8376**), versus **0.3306** for EBM and **0.0799** for logistic regression. All three final models then fit on the full training period. Each model's alert threshold maximizes F1 on validation data; no test labels set a threshold.
+The tracks create **signals for the models** and also produce their own yes/no alerts for a separate evaluation. Their alerts do not filter transactions before modeling: each classifier scores every validation and test row.
 
-## Later test results
+### Track 1: Fixed rules
 
-Every model is evaluated on the **same 1,412,824 later transactions and 1,683 positive labels**. Each row below uses its own validation-selected threshold.
+Three readable flags identify cash deposits into accounts with many earlier distinct senders, changed cash-withdrawal amounts, and new cross-border currency-mismatched account pairs. Their thresholds are illustrative and use no outcome labels.
 
-| Model | AP | Precision | Recall | F1 | FPR | Alerts | True positives | False positives | Missed positives (of 1,683) |
+### Track 2: Isolation Forest anomaly score
+
+Two Isolation Forests fit without labels on the first 10% of training days. The original broad `anomaly_score` remains a classifier feature. A second forest uses amount, change from the sender’s earlier usual amount, time, and same-location/currency behavior for standalone alerts. We selected that compact feature set using validation labels. Its alert cutoff is the 99.9th percentile of validation scores, computed without labels.
+
+### Track 3: Account-network fan-in/out
+
+Earlier distinct counterparties yield one-hop network features. The original largest-degree `network_score` remains a classifier feature. The standalone alert score divides the sum of log prior distinct counterparties by one plus the log prior sender–receiver pair count, so repeated activity within one pair is less prominent. We chose this formula using validation labels and set its cutoff at the unlabeled validation 99.9th percentile. This is simple relationship analysis, not multi-hop graph analytics.
+
+The standalone alerts from all three tracks were evaluated on the same later test period. **Caught** means alerted positive synthetic labels; **false alerts** means alerted negative labels.
+
+| Track | Alerts | Caught | False alerts | Precision | Recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fixed rules | 69,708 | 648 | 69,060 | 0.93% | 38.5% | 4.894% |
+| Isolation Forest | 1,323 | 45 | 1,278 | 3.40% | 2.67% | 0.0906% |
+| Network fan-in/out | 2,075 | 792 | 1,283 | 38.17% | 47.06% | 0.0909% |
+
+Before this alert redesign, Isolation Forest caught 5 positives with 2,340 false alerts (0.21% precision, 0.30% recall, 0.1658% FPR); the network alert caught none with 2,112 false alerts. Both revised tracks improve precision, recall, and FPR on the later test. **The classifier features were held fixed**, so this is an improvement to the standalone alert tracks, not a new XGBoost model.
+
+## Stage 3: Compare three risk-prioritization models
+
+**The three tracks are not the three classifiers.** Logistic regression, XGBoost, and EBM each use the same base transaction features, individual rule flags, the original anomaly score, and the original network features. The alert-focused anomaly and network scores are not model inputs, so the revised track alerts leave all three classifier inputs and metrics unchanged. Three expanding training-time folds select the model family by mean average precision (AP). All three models then fit on the full training period. Each model's validation threshold maximizes F1; the later test period supplies final metrics.
+
+XGBoost won the time-fold comparison with mean AP **0.9127**, versus **0.4636** for EBM and **0.1401** for logistic regression. On the later test period, each model used its own validation-selected threshold:
+
+| Model | Test AP | Precision | Recall | F1 | FPR | Alerts | Caught | False alerts | Missed of 1,683 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Logistic regression | 0.1336 | 21.2% | 21.7% | 0.2146 | 0.0965% | 1,728 | 366 | 1,362 | 1,317 |
-| **XGBoost** | **0.8959** | **93.8%** | **84.1%** | **0.8872** | 0.0066% | 1,509 | **1,416** | 93 | **267** |
-| EBM | 0.5100 | 89.3% | 41.2% | 0.5642 | **0.0059%** | **777** | 694 | **83** | 989 |
+| Logistic regression | 0.3176 | 44.2% | 29.8% | 0.3557 | 0.0449% | 1,134 | 501 | 633 | 1,182 |
+| **XGBoost** | **0.9900** | **96.6%** | **98.0%** | **0.9732** | **0.0041%** | 1,708 | **1,650** | **58** | **33** |
+| EBM | 0.7815 | 81.5% | 65.9% | 0.7286 | 0.0179% | 1,361 | 1,109 | 252 | 574 |
 
-**XGBoost** is the selected model because it ranked best across the earlier time folds, and it also has the strongest test AP, precision, recall, and F1 at its validation-selected threshold. Its 1,509 alerts comprise **1,416 positive-label transactions and 93 negative-label transactions**. EBM generates fewer alerts and slightly fewer false alerts, but catches fewer than half of test positives. Logistic regression is the easiest to describe as a weighted sum, yet its alert workload is larger and its detection is much lower on this dataset. The notebook includes a separate scorecard and explanation charts for each model: global and local Tree SHAP for XGBoost, plus InterpretML's built-in global, feature-effect, and local views for EBM.
+## Stage 4: Consolidate alerts and measure added coverage
 
-### How to read the metrics
+The **three-track union** alerts when **fixed rules OR Isolation Forest OR network fan-in/out** alerts for a transaction. A transaction flagged by multiple tracks counts once. This union contains **only track alerts**, not XGBoost alerts.
 
-An **alert** is a transaction above a model's validation-selected score threshold. A **true positive** is an alert with a positive *synthetic dataset label*. A **false positive** is an alert with a negative label. A **missed positive** (false negative) is a positive-label transaction below the threshold. These terms do not mean confirmed criminal activity.
+| Combined track alerts | Alerts | Caught | False alerts | Precision | Recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Three-track union** | **72,328** | **1,196** | **71,132** | **1.65%** | **71.1%** | **5.041%** |
 
-- **AP** summarizes ranking across thresholds. XGBoost's **0.8959 AP** is not the percentage of its actual alerts with positive labels. The test positive-label rate, **0.1191%**, is approximately the AP baseline for random ranking.
-- **Precision** = true positives ÷ alerts. For XGBoost, **1,416 ÷ 1,509 = 93.8%** of alerts match positive labels.
-- **Recall** = true positives ÷ all positive labels. For XGBoost, **1,416 ÷ 1,683 = 84.1%** caught, leaving **267 missed**.
-- **F1** = `2 × precision × recall ÷ (precision + recall)`. XGBoost's **0.8872** balances its precision and recall at this threshold.
-- **False positive rate (FPR)** = false positives ÷ all negative labels. XGBoost produces **93 false alerts among 1,411,141 negative-label transactions**, or **0.0066% FPR**. Its small percentage should always be read with the alert count.
-- **Alerts** describe transaction-level review volume. They are not necessarily unique customers or investigation cases.
+The three individual track rows total 73,106 alerts; removing 778 duplicate counts leaves **72,328 unique alerted transactions**. Of those, 1,196 have positive synthetic labels and 71,132 have negative labels. Precision is `1,196 / 72,328 = 1.65%`; recall is `1,196 / 1,683 = 71.1%`; FPR is `71,132 / 1,411,141 = 5.041%`.
 
-## Coverage gap: which positives were missed?
+We then compare track alerts with **XGBoost's own alerts**. Rules find **11 positive labels** that XGBoost missed but add **69,004 false alerts**. Isolation Forest and network fan-in/out each find **zero additional positives** beyond XGBoost, even though their standalone results improved substantially; their true-positive alerts overlap XGBoost’s. Combining all three tracks with XGBoost catches **1,661/1,683 positives (98.7% recall)** but expands the queue to **72,795 alerts** with only **2.28% precision**. This combined queue illustrates the coverage and workload tradeoff; it is not a recommended alert policy.
 
-XGBoost's **267 missed positive labels** are concentrated in several synthetic patterns:
+## Stage 5: Audit misses and explain model scores
 
-| Payment type | Positive labels | Caught | Missed | Recall |
-| --- | ---: | ---: | ---: | ---: |
-| Cash Deposit | 232 | 117 | **115** | 50.4% |
-| Cash Withdrawal | 237 | 157 | **80** | 66.2% |
-| Cross-border | 477 | 439 | 38 | 92.0% |
-| ACH | 176 | 165 | 11 | 93.8% |
-| Cheque | 165 | 155 | 10 | 93.9% |
-| Debit card | 203 | 195 | 8 | 96.1% |
-| Credit card | 193 | 188 | 5 | 97.4% |
+XGBoost's **33 missed positive labels** include 10 Cash Deposits, 9 Cross-border transactions, and 4 each of ACH and Credit card. The largest generated-typology gaps are Smurfing (10 misses) and Layered_Fan_Out (8). `Laundering_type` was used only for this post-score audit.
 
-The largest typology gap is **Smurfing: 36 of 151 caught, 115 missed (23.8% recall)**. The next largest is **Cash_Withdrawal: 157 of 237 caught, 80 missed (66.2% recall)**. `Laundering_type` was read only to create this table after predictions; it did not help the models score transactions. The high aggregate recall therefore still hides weak coverage of particular generated patterns.
+The [notebook](../aml_modeling.ipynb) shows separate model scorecards and explanation charts: logistic regression coefficients and one-row contributions, global and local Tree SHAP for XGBoost, and InterpretML's native EBM global importance, feature effect, and local explanations. These show how each model formed its score; they do not establish whether laundering occurred.
+
+## How to read the metrics
+
+An **alert** is a transaction whose model score or track signal crosses its threshold. A **true positive** is an alerted positive *synthetic dataset label*; a **false positive** is an alerted negative label; a **missed positive** is a positive-label transaction without an alert. These terms do not establish criminal activity.
+
+- **AP** summarizes ranking over many thresholds. The test label rate, 0.1191%, is an approximate random-ranking baseline.
+- **Precision** is true positives divided by alerts. **Recall** is true positives divided by all 1,683 test positive labels.
+- **F1** balances precision and recall at the validation-selected threshold.
+- **False positive rate (FPR)** is false positives divided by the 1,411,141 negative-label test transactions. It should be read alongside the absolute alert workload.
+- **Additional positives** from a track are labels XGBoost missed but the track flagged. **Additional false alerts** measure the corresponding extra workload.
 
 ## Limits and conclusion
 
-The strong XGBoost result shows that shallow trees can detect many patterns generated in SAML-D. It does **not** imply that a bank could achieve 93.8% precision or 84.1% recall on real monitoring. Synthetic labels are complete and generated from rules; real-world labels, investigation outcomes, customer context, and changing behavior are different. A label-generation shortcut is also possible in synthetic benchmarks, so unusually high scores deserve scrutiny even when the explicit typology field is excluded.
+XGBoost's 0.9900 test AP is exceptionally high for a rare-label task. The inputs contain neither the target nor the generated typology field, but SAML-D may encode clean patterns that make its labels easier to predict than real investigation outcomes. The alert redesign improved standalone track detection but did not change the classifiers’ feature values or their scores. Its improvement was selected on validation labels and confirmed on this one later test split; repeating the assessment on another time period would better establish stability. This experiment does **not** isolate which earlier feature caused the classifier improvement from older notebook versions; that would require a separate ablation. The result applies to this synthetic CSV and time split, not to a live bank.
 
-This is an educational, time-ordered model comparison. It identifies XGBoost as the best of these three choices **for this dataset and evaluation design**, while pointing to cash activity and smurfing as coverage gaps. Before operational use, a bank would need independent validation, reliable real labels and case outcomes, risk coverage analysis, review-capacity planning, and monitoring over time. No universal U.S. AML regulation specifies a required precision, recall, F1, or FPR score.
+The workflow is an educational approximation of detection and prioritization. It does not implement Actimize, Mantas, multi-hop graph analytics, an analyst console, case disposition, or a feedback loop. Real monitoring also needs customer context, investigation outcomes, risk-coverage review, capacity planning, independent validation, data quality controls, and ongoing monitoring. No universal U.S. AML rule prescribes a precision, recall, F1, or FPR target; the [FFIEC BSA/AML Examination Manual](https://bsaaml.ffiec.gov/manual/AssessingComplianceWithBSARegulatoryRequirements/04) describes risk-based monitoring.
 
-The [notebook](../aml_modeling.ipynb) contains the code, saved tables, and charts. The [project guide](PROJECT_GUIDE.md) gives the detailed feature definitions and validation steps.
-
-**Dataset citation:** Oztas et al., “Enhancing Anti-Money Laundering: Development of a Synthetic Transaction Monitoring Dataset,” *2023 IEEE International Conference on e-Business Engineering*, DOI [10.1109/ICEBE59045.2023.00028](https://doi.org/10.1109/ICEBE59045.2023.00028). The author notes that the currently distributed dataset is an updated version of the one used in the paper.
+**Dataset citation:** Oztas et al., “Enhancing Anti-Money Laundering: Development of a Synthetic Transaction Monitoring Dataset,” *2023 IEEE International Conference on e-Business Engineering*, DOI [10.1109/ICEBE59045.2023.00028](https://doi.org/10.1109/ICEBE59045.2023.00028). The author notes that the distributed dataset is an updated version of the one used in the paper.

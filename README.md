@@ -1,8 +1,16 @@
 # Explainable AML Transaction Monitoring
 
-A one-notebook ML class project using **SAML-D**, a synthetic transaction-monitoring dataset. Open [aml_modeling.ipynb](aml_modeling.ipynb) for the data profile, all modeling code, saved results, charts, and conclusions. [PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) explains the steps and metrics; [CLASS_REPORT.md](docs/CLASS_REPORT.md) is the short report.
+A one-notebook ML class project using **SAML-D**, a synthetic transaction-monitoring dataset.
 
-The notebook compares **logistic regression, XGBoost with Tree SHAP, and Explainable Boosting Machine (EBM)**. It uses all 9,504,852 transactions, starts with quick EDA of label balance, payment types, monthly rates, and same-currency amounts, then builds simple features from strictly earlier account activity. It checks models in expanding time windows, selects alert thresholds on validation data, and evaluates a later test period. It audits missed labels by payment type and laundering typology. All results stay in the notebook; there is no results folder, dashboard, dbt project, or test suite.
+## Which file should I read?
+
+| File | Purpose |
+| --- | --- |
+| [PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) | **Start here for the architecture:** how the three detection tracks feed the three models, and how alerts are compared. |
+| [aml_modeling.ipynb](aml_modeling.ipynb) | Run the full analysis in order. It contains all code, tables, charts, and saved outputs. |
+| [CLASS_REPORT.md](docs/CLASS_REPORT.md) | Read the findings, model metrics, coverage gaps, and limitations. |
+
+The project uses all 9,504,852 transactions. **Rules, anomaly detection, and network fan-in/out are three sources of signals. Logistic regression, XGBoost, and EBM are three alternative classifiers that use those signals.** The notebook evaluates each track's alerts separately, then compares them with the selected classifier's alerts. See the [architecture diagram](docs/PROJECT_GUIDE.md#architecture-at-a-glance) for the exact flow.
 
 ## Set up
 
@@ -14,7 +22,7 @@ python3.11 -m venv .venv
 .venv/bin/python -m ipykernel install --user --name aml-project --display-name 'Python (AML project .venv)'
 ```
 
-On macOS, XGBoost may need OpenMP (`brew install libomp`). In VS Code, select **Python (AML project .venv)** as the notebook kernel and run cells from top to bottom. The native EBM explanation graphs use Plotly and are interactive in the notebook. The full-data run needs substantial memory and time because it fits three models in three time folds and then fits each model again.
+On macOS, XGBoost may need OpenMP (`brew install libomp`). In VS Code, select **Python (AML project .venv)** as the notebook kernel and run cells from top to bottom. The native EBM explanation graphs use Plotly and are interactive in the notebook. The full-data run needs substantial memory and time because it scores 9.5 million rows with the anomaly model, fits three classifiers in three time folds, and then fits each classifier again.
 
 ## Get the data
 
@@ -32,11 +40,10 @@ The downloaded archive used for this project has SHA-256 `3abd02c11143e395f7f0f1
 
 | Sections | What happens |
 | --- | --- |
-| **1–2** | Load every SAML-D row and explore label balance, payment types, monthly rates, and same-currency amounts. |
-| **3–4** | Calculate earlier account activity; split by time; define model inputs. |
-| **5–6** | Define three explainable models and compare them in expanding time folds. |
-| **7–8** | Fit on training data, choose thresholds on validation, and report later test metrics. |
-| **8.1** | Check which payment methods and laundering patterns the selected model misses. |
-| **9–10** | Show a separate scorecard and explanation for each model, including InterpretML's built-in EBM views, then summarize the result. |
+| **1–4** | Load and explore SAML-D, build past-only transaction and relationship features, then split by time. |
+| **5–7** | Run fixed rules, an unsupervised anomaly score, and account-network fan-in/out signals. |
+| **8–10** | Combine track signals with base features and compare three models in expanding time folds. |
+| **11–13** | Fit final models, select thresholds on validation, evaluate the later test, and compare standalone and consolidated track alerts. |
+| **14–16** | Audit missed labels, inspect each model’s explanation (including native EBM views), and summarize the result. |
 
-`Laundering_type` describes a synthetic scenario and is **excluded from all model inputs** to prevent target leakage. Raw account IDs are used to calculate prior activity, then excluded from model inputs. Scores rank synthetic labels for review; they are neither calibrated crime probabilities nor evidence of actual laundering.
+`Laundering_type` describes a synthetic scenario and is **excluded from all detection and model inputs** to prevent target leakage. Raw account IDs are used to calculate prior activity, then excluded from model inputs. The rules and network scores are simple teaching examples, not vendor software or full graph analytics. Scores rank synthetic labels for review; they are neither calibrated crime probabilities nor evidence of actual laundering.
