@@ -56,9 +56,9 @@ XGBoost won the time-fold comparison with mean AP **0.9127**, versus **0.4636** 
 | **XGBoost** | **0.9900** | **96.6%** | **98.0%** | **0.9732** | **0.0041%** | 1,708 | **1,650** | **58** | **33** |
 | EBM | 0.7815 | 81.5% | 65.9% | 0.7286 | 0.0179% | 1,361 | 1,109 | 252 | 574 |
 
-## Stage 4: Consolidate alerts and measure added coverage
+## Stage 4: Diagnostic alert comparison
 
-The **three-track union** alerts when **fixed rules OR Isolation Forest OR network fan-in/out** alerts for a transaction. A transaction flagged by multiple tracks counts once. This union contains **only track alerts**, not XGBoost alerts.
+**XGBoost is the selected model and produces 1,708 test alerts.** This section asks what would happen if the standalone track alerts were added to its queue; it does not propose doing so. The **three-track union** alerts when **fixed rules OR Isolation Forest OR network fan-in/out** alerts for a transaction. A transaction flagged by multiple tracks counts once. This union contains **only track alerts**, not XGBoost alerts.
 
 | Combined track alerts | Alerts | Caught | False alerts | Precision | Recall | FPR |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |

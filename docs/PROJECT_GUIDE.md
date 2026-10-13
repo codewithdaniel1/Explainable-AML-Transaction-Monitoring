@@ -12,30 +12,32 @@ The local SAML-D CSV has **9,504,852 transactions** from October 7, 2022 through
 
 The project has **three detection tracks** and **three alternative classifiers**. A track produces a simple score or flag. Each classifier then uses those signals alongside the original transaction features. The classifiers do not wait for a track to raise an alert: each scores every validation and test row.
 
+The alert counts in this diagram are for the **1,412,824 later test transactions**. Each model uses its own validation-selected threshold. **XGBoost is the selected model: its 1,708 alerts are the main result.** The track-union counts are a diagnostic comparison, not the chosen alert queue. Counts from different tracks overlap, so they cannot be added directly.
+
 ```mermaid
 flowchart TD
     A[All SAML-D transactions] --> B[Profile and past-only features]
     B --> C[Chronological train / validation / test split]
-    C --> R[Track 1: fixed rules]
-    C --> I[Track 2: Isolation Forest model and alert scores]
-    C --> N[Track 3: account-network model and alert scores]
+    C --> R["Track 1: fixed rules<br/>69,708 test alerts"]
+    C --> I["Track 2: Isolation Forest<br/>model + alert scores<br/>1,323 test alerts"]
+    C --> N["Track 3: account network<br/>model + alert scores<br/>2,075 test alerts"]
     R --> F[Shared model inputs: base features + track signals]
     I --> F
     N --> F
-    F --> L[Logistic regression]
-    F --> X[XGBoost]
-    F --> E[EBM]
-    L --> M[Time-fold comparison; validation thresholds; test metrics]
+    F --> L["Logistic regression<br/>1,134 test alerts"]
+    F --> X["XGBoost<br/>1,708 test alerts"]
+    F --> E["EBM<br/>1,361 test alerts"]
+    L --> M["Time-fold comparison<br/>Selected model: XGBoost<br/>1,708 test alerts"]
     X --> M
     E --> M
-    R -. track alerts .-> Q[Compare track alerts with selected model alerts]
+    M --> Z["Selected-model coverage audit<br/>33 positive labels missed<br/>model explanations"]
+    R -. diagnostic track alerts .-> Q["Optional comparison only<br/>Three-track union: 72,328 alerts<br/>Union + XGBoost: 72,795 alerts"]
     I -. track alerts .-> Q
     N -. track alerts .-> Q
-    M --> Q
-    Q --> Z[Coverage audit and model explanations]
+    M -. diagnostic comparison .-> Q
 ```
 
-**Two uses of each track:** its signal can help all three classifiers calculate a risk score; its own yes/no alert is measured separately. The **three-track union** is `rule_alert OR anomaly_alert OR network_alert` for each transaction, so overlapping alerts count once. It contains no classifier alerts. A separate comparison adds track alerts to the selected classifier's alerts to show the change in recall and workload. Neither union is a fourth fitted model or the recommended queue.
+**Two uses of each track:** its signal can help all three classifiers calculate a risk score; its own yes/no alert is measured separately. The **three-track union** is `rule_alert OR anomaly_alert OR network_alert` for each transaction, so overlapping alerts count once. It contains no classifier alerts. The optional comparison adds track alerts to XGBoost's alerts to ask whether they recover any of its 33 missed positive labels and how much extra review work that would create. **The project selects XGBoost alone; it does not adopt either union as its alert queue.**
 
 All of these blocks are sections of the **same [aml_modeling.ipynb](../aml_modeling.ipynb)**. Sections 5–7 are the three tracks; sections 8–16 combine their signals, compare the three classifiers, and explain the results. No intermediate CSV or separate notebook is needed.
 
